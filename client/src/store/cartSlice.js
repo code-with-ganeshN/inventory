@@ -61,7 +61,7 @@ const cartSlice = createSlice({
 
 function calculateTotals(state) {
   state.subtotal = state.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  state.tax = state.subtotal * 0.1;
+  state.tax = state.subtotal * 1.0;
   state.total = state.subtotal + state.tax;
 }
 

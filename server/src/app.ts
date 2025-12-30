@@ -22,6 +22,67 @@ app.get('/', (_req, res) => {
   res.send({ status: 'ok' });
 });
 
+// Database inspection endpoint
+app.get('/api/db-info', async (_req, res) => {
+  try {
+    const { pool } = require('./config/db');
+    
+    // Get table structure
+    const columns = await pool.query(`
+      SELECT column_name, data_type, is_nullable 
+      FROM information_schema.columns 
+      WHERE table_name = 'categories'
+      ORDER BY ordinal_position
+    `);
+    
+    // Get sample data
+    const sampleData = await pool.query('SELECT * FROM categories LIMIT 3');
+    
+    res.json({
+      success: true,
+      tableStructure: columns.rows,
+      sampleData: sampleData.rows,
+      rowCount: sampleData.rows.length
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Test endpoint for categories (no auth)
+app.get('/api/categories-test', async (_req, res) => {
+  try {
+    const { pool } = require('./config/db');
+    console.log('Testing categories table...');
+    
+    // Test table exists
+    const tableCheck = await pool.query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name = 'categories'
+    `);
+    
+    if (tableCheck.rows.length === 0) {
+      return res.json({ success: false, error: 'Categories table does not exist' });
+    }
+    
+    // Test select
+    const result = await pool.query('SELECT * FROM categories LIMIT 5');
+    res.json({ 
+      success: true, 
+      count: result.rows.length, 
+      data: result.rows,
+      message: 'Categories fetched successfully'
+    });
+  } catch (error) {
+    console.error('Categories test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      code: error.code
+    });
+  }
+});
+
 // API Routes
 app.use('/api', routes);
 

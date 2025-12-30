@@ -9,8 +9,13 @@ export default function ProtectedRoute({ children, requiredRole = null }) {
     return <Navigate to="/login" />;
   }
 
-  if (requiredRole && user?.role !== requiredRole && user?.role !== 'SUPER_ADMIN') {
-    return <Navigate to="/" />;
+  if (requiredRole) {
+    const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
+    const hasAccess = allowedRoles.includes(user?.role) || user?.role === 'SUPER_ADMIN';
+    
+    if (!hasAccess) {
+      return <Navigate to="/" />;
+    }
   }
 
   return children;

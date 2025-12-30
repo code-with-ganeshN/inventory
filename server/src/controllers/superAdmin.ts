@@ -5,11 +5,11 @@ import { logAuditAction } from '../utils/audit';
 import { z } from 'zod';
 
 const CreateAdminSchema = z.object({
-  email: z.string().email(),
-  first_name: z.string(),
-  last_name: z.string(),
+  email: z.string().email('Invalid email format'),
+  first_name: z.string().min(1, 'First name is required'),
+  last_name: z.string().min(1, 'Last name is required'),
   phone: z.string().optional(),
-  password: z.string().min(8).optional(),
+  password: z.string().min(8, 'Password must be at least 8 characters long'),
 });
 
 const UpdateAdminSchema = z.object({
@@ -26,8 +26,14 @@ export async function getAllUsers(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const { role, status, limit = 20, offset = 0 } = req.query;
-    let query = `SELECT u.*, r.name as role_name FROM users u LEFT JOIN roles r ON u.role_id = r.id`;
+    const { role, status, page = 1, limit = 10 } = req.query;
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(100, parseInt(limit as string) || 10);
+    const offset = (pageNum - 1) * limitNum;
+
+    let countQuery = `SELECT COUNT(*) as total FROM users u LEFT JOIN roles r ON u.role_id = r.id`;
+    let dataQuery = `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.role_id, u.is_active, u.is_locked, u.created_at, r.name as role_name FROM users u LEFT JOIN roles r ON u.role_id = r.id`;
+    
     const params: any[] = [];
     const conditions: string[] = [];
 
@@ -45,14 +51,41 @@ export async function getAllUsers(req: Request, res: Response): Promise<void> {
     }
 
     if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
+      const whereClause = ' WHERE ' + conditions.join(' AND ');
+      countQuery += whereClause;
+      dataQuery += whereClause;
     }
 
-    query += ` ORDER BY u.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(limit, offset);
+    dataQuery += ` ORDER BY u.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limitNum, offset);
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const countResult = await pool.query(countQuery, params.slice(0, params.length - 2));
+    const total = parseInt(countResult.rows[0].total);
+
+    const result = await pool.query(dataQuery, params);
+    
+    // Transform users to match frontend expectations
+    const users = result.rows.map((user: any) => ({
+      id: user.id,
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      phone: user.phone,
+      role_id: user.role_id,
+      role_name: user.role_name,
+      status: user.is_active ? 'ACTIVE' : user.is_locked ? 'LOCKED' : 'INACTIVE',
+      created_at: user.created_at
+    }));
+
+    res.json({
+      data: {
+        users,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
+      }
+    });
   } catch (error) {
     console.error('Get all users error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -74,8 +107,7 @@ export async function createAdminAccount(req: Request, res: Response): Promise<v
       return;
     }
 
-    const password = data.password || generateRandomPassword();
-    const passwordHash = await hashPassword(password);
+    const passwordHash = await hashPassword(data.password);
 
     // Get ADMIN role id (assuming it's 2)
     const roleResult = await pool.query("SELECT id FROM roles WHERE name = 'ADMIN'");
@@ -87,18 +119,28 @@ export async function createAdminAccount(req: Request, res: Response): Promise<v
     const adminRoleId = roleResult.rows[0].id;
 
     const result = await pool.query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, phone, role_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, email, first_name, last_name, phone, role_id, is_active`,
+      `INSERT INTO users (email, password_hash, first_name, last_name, phone, role_id, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, true)
+       RETURNING id, email, first_name, last_name, phone, role_id, is_active, created_at`,
       [data.email, passwordHash, data.first_name, data.last_name, data.phone, adminRoleId]
     );
 
-    await logAuditAction(req.user.id, 'ADMIN_ACCOUNT_CREATED', 'USER', result.rows[0].id, null, { email: data.email }, req.ip, req.userAgent);
+    const user = result.rows[0];
+
+    await logAuditAction(req.user.id, 'ADMIN_ACCOUNT_CREATED', 'USER', user.id, null, { email: data.email }, req.ip, req.userAgent);
 
     res.status(201).json({
       message: 'Admin account created successfully',
-      user: result.rows[0],
-      password: !data.password ? password : undefined,
+      user: {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        phone: user.phone,
+        role_id: user.role_id,
+        status: user.is_active ? 'ACTIVE' : 'INACTIVE',
+        created_at: user.created_at
+      }
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -162,6 +204,12 @@ export async function deactivateUser(req: Request, res: Response): Promise<void>
 
     const { id } = req.params;
 
+    // Prevent modifying own account
+    if (req.user?.id === parseInt(id)) {
+      res.status(400).json({ error: 'You cannot modify your own account' });
+      return;
+    }
+
     const result = await pool.query(
       'UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
       [id]
@@ -189,6 +237,12 @@ export async function activateUser(req: Request, res: Response): Promise<void> {
     }
 
     const { id } = req.params;
+
+    // Prevent modifying own account
+    if (req.user?.id === parseInt(id)) {
+      res.status(400).json({ error: 'You cannot modify your own account' });
+      return;
+    }
 
     const result = await pool.query(
       'UPDATE users SET is_active = true, is_locked = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
@@ -293,6 +347,62 @@ export async function getUserLoginHistory(req: Request, res: Response): Promise<
     res.json(result.rows);
   } catch (error) {
     console.error('Get login history error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function deleteUser(req: Request, res: Response): Promise<void> {
+  try {
+    if (req.user?.role !== 'SUPER_ADMIN') {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const { id } = req.params;
+
+    // Prevent deleting the Super Admin user itself
+    const userResult = await pool.query('SELECT role_id FROM users WHERE id = $1', [id]);
+    if (userResult.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const user = userResult.rows[0];
+    
+    // Check if trying to delete the current user
+    if (req.user?.id === parseInt(id)) {
+      res.status(400).json({ error: 'You cannot delete your own account' });
+      return;
+    }
+
+    // Check if user has items in cart
+    const cartCheck = await pool.query('SELECT COUNT(*) as cart_count FROM shopping_carts WHERE user_id = $1', [id]);
+    const cartItemCount = parseInt(cartCheck.rows[0].cart_count);
+    
+    if (cartItemCount > 0) {
+      res.status(400).json({ error: 'This account cannot be deleted because there are items in the cart.' });
+      return;
+    }
+
+    // Delete user
+    const result = await pool.query(
+      'DELETE FROM users WHERE id = $1 RETURNING id, email, first_name, last_name',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    await logAuditAction(req.user.id, 'USER_DELETED', 'USER', parseInt(id), null, { email: result.rows[0].email }, req.ip, req.userAgent);
+
+    res.json({
+      message: 'User deleted successfully',
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

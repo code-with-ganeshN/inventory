@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/Layout/AdminLayout';
 import { Card, Loading, Error, Badge } from '../../components/Common';
+import { UsersIcon, ProductIcon, CartIcon, ClipboardIcon } from '../../components/Icons';
 import { adminAPI, orderAPI, productAPI, auditAPI } from '../../api/endpoints';
 
 export default function SuperAdminDashboard() {
@@ -58,19 +59,28 @@ export default function SuperAdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card>
           <div className="text-center">
-            <div className="text-4xl font-bold text-blue-600 mb-2">👥 {stats.totalUsers}</div>
+            <div className="flex items-center justify-center text-4xl font-bold text-blue-600 mb-2">
+              <UsersIcon className="w-8 h-8 mr-2" />
+              <span>{stats.totalUsers}</span>
+            </div>
             <p className="text-gray-600">Total Users</p>
           </div>
         </Card>
         <Card>
           <div className="text-center">
-            <div className="text-4xl font-bold text-green-600 mb-2">📦 {stats.totalProducts}</div>
+            <div className="flex items-center justify-center text-4xl font-bold text-green-600 mb-2">
+              <ProductIcon className="w-8 h-8 mr-2" />
+              <span>{stats.totalProducts}</span>
+            </div>
             <p className="text-gray-600">Total Products</p>
           </div>
         </Card>
         <Card>
           <div className="text-center">
-            <div className="text-4xl font-bold text-purple-600 mb-2">🛒 {stats.totalOrders}</div>
+            <div className="flex items-center justify-center text-4xl font-bold text-purple-600 mb-2">
+              <CartIcon className="w-8 h-8 mr-2" />
+              <span>{stats.totalOrders}</span>
+            </div>
             <p className="text-gray-600">Total Orders</p>
           </div>
         </Card>

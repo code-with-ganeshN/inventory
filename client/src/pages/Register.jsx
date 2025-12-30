@@ -5,41 +5,117 @@ import { loginSuccess, loginFailure, setLoading } from '../store/authSlice';
 import { authAPI } from '../api/endpoints';
 
 export default function Register() {
-  const [email, setEmail] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [formData, setFormData] = useState({
+    email: '',
+    firstName: '',
+    lastName: '',
+    password: '',
+    confirmPassword: ''
+  });
+  const [errors, setErrors] = useState({});
   const [error, setError] = useState(null);
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
+  const validateField = (name, value) => {
+    const newErrors = { ...errors };
+    
+    switch (name) {
+      case 'email':
+        if (!value.trim()) {
+          newErrors.email = 'Email is required';
+        } else if (!/^[^\s@]+@gmail\.com$/.test(value)) {
+          newErrors.email = 'Please enter a valid Gmail address';
+        } else {
+          delete newErrors.email;
+        }
+        break;
+        
+      case 'firstName':
+        if (!value.trim()) {
+          newErrors.firstName = 'First name is required';
+        } else if (value.length < 2) {
+          newErrors.firstName = 'First name must be at least 2 characters';
+        } else if (!/^[a-zA-Z\s]+$/.test(value)) {
+          newErrors.firstName = 'First name can only contain letters and spaces';
+        } else {
+          delete newErrors.firstName;
+        }
+        break;
+        
+      case 'lastName':
+        if (!value.trim()) {
+          newErrors.lastName = 'Last name is required';
+        } else if (!/^[a-zA-Z\s]+$/.test(value)) {
+          newErrors.lastName = 'Last name can only contain letters and spaces';
+        } else {
+          delete newErrors.lastName;
+        }
+        break;
+        
+      case 'password':
+        if (!value) {
+          newErrors.password = 'Password is required';
+        } else if (value.length < 8) {
+          newErrors.password = 'Password must be at least 8 characters';
+        } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(value)) {
+          newErrors.password = 'Password must contain at least one uppercase letter, one lowercase letter, and one number';
+        } else {
+          delete newErrors.password;
+        }
+        break;
+        
+      case 'confirmPassword':
+        if (!value) {
+          newErrors.confirmPassword = 'Please confirm your password';
+        } else if (value !== formData.password) {
+          newErrors.confirmPassword = 'Passwords do not match';
+        } else {
+          delete newErrors.confirmPassword;
+        }
+        break;
+        
+      default:
+        break;
+    }
+    
+    setErrors(newErrors);
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+    validateField(name, value);
+    
+    // Re-validate confirm password if password changes
+    if (name === 'password' && formData.confirmPassword) {
+      validateField('confirmPassword', formData.confirmPassword);
+    }
+  };
+
   const handleRegister = async (e) => {
     e.preventDefault();
     
-    // Validation
-    if (!email || !firstName || !lastName || !password || !confirmPassword) {
-      setError('All fields are required');
-      return;
-    }
-
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
+    // Validate all fields
+    Object.keys(formData).forEach(key => {
+      validateField(key, formData[key]);
+    });
+    
+    if (Object.keys(errors).length > 0) {
+      setError('Please fix the validation errors');
       return;
     }
 
     dispatch(setLoading(true));
     try {
       const response = await authAPI.register({
-        email,
-        first_name: firstName,
-        last_name: lastName,
-        password,
+        email: formData.email,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        password: formData.password,
       });
       
       dispatch(loginSuccess({
@@ -83,11 +159,16 @@ export default function Register() {
                 name="firstName"
                 type="text"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className={`appearance-none rounded-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm ${
+                  errors.firstName ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="First Name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
+                value={formData.firstName}
+                onChange={handleChange}
               />
+              {errors.firstName && (
+                <p className="text-red-500 text-xs mt-1 px-3">{errors.firstName}</p>
+              )}
             </div>
 
             {/* Last Name */}
@@ -98,11 +179,16 @@ export default function Register() {
                 name="lastName"
                 type="text"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className={`appearance-none rounded-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm ${
+                  errors.lastName ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Last Name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
+                value={formData.lastName}
+                onChange={handleChange}
               />
+              {errors.lastName && (
+                <p className="text-red-500 text-xs mt-1 px-3">{errors.lastName}</p>
+              )}
             </div>
 
             {/* Email */}
@@ -113,11 +199,16 @@ export default function Register() {
                 name="email"
                 type="email"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                className={`appearance-none rounded-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm ${
+                  errors.email ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="Gmail address (example@gmail.com)"
+                value={formData.email}
+                onChange={handleChange}
               />
+              {errors.email && (
+                <p className="text-red-500 text-xs mt-1 px-3">{errors.email}</p>
+              )}
             </div>
 
             {/* Password */}
@@ -128,11 +219,16 @@ export default function Register() {
                 name="password"
                 type="password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                className={`appearance-none rounded-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm ${
+                  errors.password ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="Password (min 8 chars, 1 upper, 1 lower, 1 number)"
+                value={formData.password}
+                onChange={handleChange}
               />
+              {errors.password && (
+                <p className="text-red-500 text-xs mt-1 px-3">{errors.password}</p>
+              )}
             </div>
 
             {/* Confirm Password */}
@@ -143,11 +239,16 @@ export default function Register() {
                 name="confirmPassword"
                 type="password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className={`appearance-none rounded-none relative block w-full px-3 py-2 border placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm ${
+                  errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                value={formData.confirmPassword}
+                onChange={handleChange}
               />
+              {errors.confirmPassword && (
+                <p className="text-red-500 text-xs mt-1 px-3">{errors.confirmPassword}</p>
+              )}
             </div>
           </div>
 

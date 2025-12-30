@@ -4,46 +4,43 @@ import { logAuditAction } from '../utils/audit';
 import { z } from 'zod';
 
 const CreateCategorySchema = z.object({
-  name: z.string(),
+  name: z.string().min(1, 'Name is required'),
   description: z.string().optional(),
-  parent_id: z.number().optional(),
+  parent_id: z.number().nullable().optional(),
 });
 
 const UpdateCategorySchema = z.object({
-  name: z.string().optional(),
+  name: z.string().min(1).optional(),
   description: z.string().optional(),
-  parent_id: z.number().optional(),
+  parent_id: z.number().nullable().optional(),
   display_order: z.number().optional(),
 });
 
 export async function getAllCategories(req: Request, res: Response): Promise<void> {
   try {
-    const { active, parent_id } = req.query;
-    const params: any[] = [];
-    const conditions: string[] = [];
-
+    console.log('Getting all categories - starting query');
+    
     let query = 'SELECT * FROM categories';
-
-    if (active === 'true') {
-      conditions.push('is_active = true');
+    const params: any[] = [];
+    
+    // Filter by organization if user is ADMIN (not SUPER_ADMIN)
+    if (req.user?.role === 'ADMIN' && req.user?.organization_id) {
+      query += ' WHERE organization_id = $1';
+      params.push(req.user.organization_id);
     }
-
-    if (parent_id) {
-      conditions.push(`parent_id = $${params.length + 1}`);
-      params.push(parent_id);
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    query += ' ORDER BY display_order, name';
-
+    
+    query += ' ORDER BY id';
+    
     const result = await pool.query(query, params);
+    console.log('Query executed successfully, rows found:', result.rows.length);
+    
     res.json(result.rows);
   } catch (error) {
     console.error('Get all categories error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Database error', 
+      message: error.message
+    });
   }
 }
 
@@ -73,21 +70,26 @@ export async function getCategoryById(req: Request, res: Response): Promise<void
 
 export async function createCategory(req: Request, res: Response): Promise<void> {
   try {
+    console.log('Creating category with data:', req.body);
+    console.log('User role:', req.user?.role);
+    
     if (!['SUPER_ADMIN', 'ADMIN'].includes(req.user?.role || '')) {
+      console.log('Access denied for role:', req.user?.role);
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
 
     const data = CreateCategorySchema.parse(req.body);
+    console.log('Validated data:', data);
 
     const result = await pool.query(
-      `INSERT INTO categories (name, description, parent_id)
-       VALUES ($1, $2, $3)
+      `INSERT INTO categories (name, description, parent_id, is_active, display_order)
+       VALUES ($1, $2, $3, true, 0)
        RETURNING *`,
-      [data.name, data.description, data.parent_id || null]
+      [data.name, data.description || null, data.parent_id || null]
     );
 
-    await logAuditAction(req.user?.id || null, 'CATEGORY_CREATED', 'CATEGORY', result.rows[0].id, null, data, req.ip, req.userAgent);
+    console.log('Category created:', result.rows[0]);
 
     res.status(201).json({
       message: 'Category created successfully',
@@ -95,9 +97,11 @@ export async function createCategory(req: Request, res: Response): Promise<void>
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error('Category validation error:', error.issues);
       res.status(400).json({ error: 'Validation failed', details: error.issues });
     } else {
       console.error('Create category error:', error);
+      console.error('Error details:', error.message, error.code);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

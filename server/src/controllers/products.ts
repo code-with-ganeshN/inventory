@@ -4,12 +4,12 @@ import { logAuditAction } from '../utils/audit';
 import { z } from 'zod';
 
 const CreateProductSchema = z.object({
-  name: z.string(),
-  sku: z.string(),
-  description: z.string().optional(),
-  price: z.number().positive(),
-  category_id: z.number(),
-  image_url: z.string().optional(),
+  name: z.string().min(1, 'Name is required'),
+  sku: z.string().min(1, 'SKU is required'),
+  description: z.string().optional().nullable(),
+  price: z.number().positive('Price must be positive'),
+  category_id: z.number().positive('Category ID is required'),
+  image_url: z.string().optional().nullable(),
 });
 
 const UpdateProductSchema = z.object({
@@ -31,6 +31,12 @@ export async function getAllProducts(req: Request, res: Response): Promise<void>
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
     `;
+
+    // Filter by organization if user is ADMIN (not SUPER_ADMIN)
+    if (req.user?.role === 'ADMIN' && req.user?.organization_id) {
+      conditions.push(`p.organization_id = $${params.length + 1}`);
+      params.push(req.user.organization_id);
+    }
 
     if (category_id) {
       conditions.push(`p.category_id = $${params.length + 1}`);
@@ -101,10 +107,19 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
       `INSERT INTO products (name, sku, description, price, category_id, image_url, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [data.name, data.sku, data.description, data.price, data.category_id, data.image_url, req.user?.id]
+      [data.name, data.sku, data.description || null, data.price, data.category_id, data.image_url || null, req.user?.id]
     );
 
-    await logAuditAction(req.user?.id || null, 'PRODUCT_CREATED', 'PRODUCT', result.rows[0].id, null, data, req.ip, req.userAgent);
+    await logAuditAction(
+      req.user?.id || null, 
+      'PRODUCT_CREATED', 
+      'PRODUCT', 
+      result.rows[0].id, 
+      null, 
+      data, 
+      req.ip || null, 
+      req.get('user-agent') || null
+    );
 
     res.status(201).json({
       message: 'Product created successfully',
@@ -112,9 +127,15 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error('Product validation error:', error.issues);
       res.status(400).json({ error: 'Validation failed', details: error.issues });
     } else {
       console.error('Create product error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      });
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -216,6 +237,55 @@ export async function activateProduct(req: Request, res: Response): Promise<void
     res.json({ message: 'Product activated successfully', product: result.rows[0] });
   } catch (error) {
     console.error('Activate product error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+export async function deleteProduct(req: Request, res: Response): Promise<void> {
+  try {
+    if (!['SUPER_ADMIN', 'ADMIN'].includes(req.user?.role || '')) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const { id } = req.params;
+
+    // Check if product exists and is inactive
+    const productCheck = await pool.query('SELECT is_active FROM products WHERE id = $1', [id]);
+    if (productCheck.rows.length === 0) {
+      res.status(404).json({ error: 'Product not found' });
+      return;
+    }
+    if (productCheck.rows[0].is_active) {
+      res.status(400).json({ error: 'Product must be deactivated before deletion' });
+      return;
+    }
+
+    // Check for pending orders
+    const pendingOrders = await pool.query(
+      `SELECT COUNT(*) as count FROM order_items oi 
+       JOIN orders o ON oi.order_id = o.id 
+       WHERE oi.product_id = $1 AND o.status NOT IN ('DELIVERED', 'CANCELLED')`,
+      [id]
+    );
+    if (parseInt(pendingOrders.rows[0].count) > 0) {
+      res.status(400).json({ error: 'Cannot delete product with pending orders' });
+      return;
+    }
+
+    // Check for items in cart
+    const cartItems = await pool.query('SELECT COUNT(*) as count FROM shopping_cart WHERE product_id = $1', [id]);
+    if (parseInt(cartItems.rows[0].count) > 0) {
+      res.status(400).json({ error: 'Cannot delete product that exists in shopping carts' });
+      return;
+    }
+
+    await pool.query('DELETE FROM products WHERE id = $1', [id]);
+    await logAuditAction(req.user?.id || null, 'PRODUCT_DELETED', 'PRODUCT', parseInt(id), null, {}, req.ip, req.userAgent);
+
+    res.json({ message: 'Product deleted successfully' });
+  } catch (error) {
+    console.error('Delete product error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

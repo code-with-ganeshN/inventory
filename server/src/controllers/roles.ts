@@ -22,7 +22,12 @@ export async function getAllRoles(req: Request, res: Response): Promise<void> {
     }
 
     const result = await pool.query('SELECT * FROM roles ORDER BY name');
-    res.json(result.rows);
+    res.json({
+      data: {
+        roles: result.rows,
+        total: result.rows.length
+      }
+    });
   } catch (error) {
     console.error('Get all roles error:', error);
     res.status(500).json({ error: 'Internal server error' });

@@ -1,4 +1,5 @@
 import { pool } from '../config/db';
+import { hashPassword } from '../utils/password';
 
 export async function seedRoles() {
   try {
@@ -112,14 +113,12 @@ export async function seedRolePermissions() {
       );
     }
 
-    // Admin gets product, inventory, order, category, supplier permissions
+    // Admin gets product, inventory, order, category permissions only
     const adminPermissions = [
       'create_product', 'update_product', 'deactivate_product', 'view_products',
-      'create_category', 'update_category',
+      'create_category', 'update_category', 'delete_category',
       'view_inventory', 'add_stock', 'adjust_stock', 'set_thresholds',
-      'view_orders', 'confirm_order', 'update_order_status', 'cancel_order',
-      'manage_suppliers', 'link_product_supplier',
-      'view_reports'
+      'view_orders', 'confirm_order', 'update_order_status', 'cancel_order'
     ];
 
     for (const permName of adminPermissions) {
@@ -154,6 +153,52 @@ export async function seedWarehouse() {
   }
 }
 
+export async function seedDefaultUsers() {
+  try {
+    // Create Super Admin
+    const existingSuperAdmin = await pool.query(
+      `SELECT id FROM users WHERE email = 'admin@inventory.local'`
+    );
+
+    if (existingSuperAdmin.rows.length === 0) {
+      const superAdminRoleResult = await pool.query(`SELECT id FROM roles WHERE name = 'SUPER_ADMIN'`);
+      if (superAdminRoleResult.rows.length > 0) {
+        const superAdminRoleId = superAdminRoleResult.rows[0].id;
+        const password = await hashPassword('admin@123456');
+
+        await pool.query(
+          `INSERT INTO users (email, password_hash, first_name, last_name, role_id, is_active)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          ['admin@inventory.local', password, 'System', 'Administrator', superAdminRoleId]
+        );
+        console.log('✓ Super Admin created (Email: admin@inventory.local, Password: admin@123456)');
+      }
+    }
+
+    // Create Admin User
+    const existingAdmin = await pool.query(
+      `SELECT id FROM users WHERE email = 'admin@test.com'`
+    );
+
+    if (existingAdmin.rows.length === 0) {
+      const adminRoleResult = await pool.query(`SELECT id FROM roles WHERE name = 'ADMIN'`);
+      if (adminRoleResult.rows.length > 0) {
+        const adminRoleId = adminRoleResult.rows[0].id;
+        const password = await hashPassword('admin123');
+
+        await pool.query(
+          `INSERT INTO users (email, password_hash, first_name, last_name, role_id, is_active)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          ['admin@test.com', password, 'Admin', 'User', adminRoleId]
+        );
+        console.log('✓ Admin user created (Email: admin@test.com, Password: admin123)');
+      }
+    }
+  } catch (error) {
+    console.error('Error seeding default users:', error);
+  }
+}
+
 export async function initializeDatabase() {
   try {
     console.log('Initializing database seeds...');
@@ -161,6 +206,7 @@ export async function initializeDatabase() {
     await seedPermissions();
     await seedRolePermissions();
     await seedWarehouse();
+    await seedDefaultUsers();
     console.log('✓ Database initialization complete');
   } catch (error) {
     console.error('Database initialization error:', error);

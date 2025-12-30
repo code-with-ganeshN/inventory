@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import UserLayout from '../components/Layout/UserLayout';
 import { Card, Loading, Error } from '../components/Common';
+import { ProductIcon, BoltIcon, LockIcon, DashboardIcon, UsersIcon } from '../components/Icons';
 import { productAPI } from '../api/endpoints';
 import { setProducts, setLoading, setError } from '../store/productSlice';
 
@@ -71,7 +72,7 @@ export default function Home() {
               <Card key={product.id} className="hover:shadow-lg transition cursor-pointer">
                 <Link to={`/products/${product.id}`}>
                   <div className="bg-gray-200 h-40 rounded-lg mb-4 flex items-center justify-center text-gray-400">
-                    📦 {product.name.substring(0, 10)}...
+                    <ProductIcon className="w-16 h-16 text-gray-400" />
                   </div>
                   <h4 className="font-bold text-lg mb-2 hover:text-blue-600">{product.name}</h4>
                   <p className="text-gray-600 text-sm mb-4">{product.description?.substring(0, 60)}...</p>
@@ -93,28 +94,28 @@ export default function Home() {
         <h3 className="text-2xl font-bold mb-6 text-gray-800">Why Choose Us?</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex space-x-4">
-            <div className="text-3xl">⚡</div>
+            <div className="text-3xl"><BoltIcon className="w-8 h-8 text-yellow-500" /></div>
             <div>
               <h4 className="font-bold mb-2">Fast Delivery</h4>
               <p className="text-gray-600">Quick order processing and shipping</p>
             </div>
           </div>
           <div className="flex space-x-4">
-            <div className="text-3xl">🔒</div>
+            <div className="text-3xl"><LockIcon className="w-8 h-8 text-gray-700" /></div>
             <div>
               <h4 className="font-bold mb-2">Secure</h4>
               <p className="text-gray-600">Enterprise-grade security for your data</p>
             </div>
           </div>
           <div className="flex space-x-4">
-            <div className="text-3xl">📊</div>
+            <div className="text-3xl"><DashboardIcon className="w-8 h-8 text-purple-600" /></div>
             <div>
               <h4 className="font-bold mb-2">Analytics</h4>
               <p className="text-gray-600">Detailed insights into your inventory</p>
             </div>
           </div>
           <div className="flex space-x-4">
-            <div className="text-3xl">👥</div>
+            <div className="text-3xl"><UsersIcon className="w-8 h-8 text-blue-600" /></div>
             <div>
               <h4 className="font-bold mb-2">Support</h4>
               <p className="text-gray-600">24/7 customer support team</p>

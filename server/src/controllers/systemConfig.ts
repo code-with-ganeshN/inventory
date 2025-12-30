@@ -16,14 +16,22 @@ const SystemConfigSchema = z.object({
 
 export async function getSystemConfig(req: Request, res: Response): Promise<void> {
   try {
-    const result = await pool.query('SELECT key, value, description FROM system_config ORDER BY key');
+    const result = await pool.query('SELECT id, key, value, description FROM system_config ORDER BY key');
     
-    const config: any = {};
-    for (const row of result.rows) {
-      config[row.key] = row.value;
-    }
+    const configs = result.rows.map((row: any) => ({
+      id: row.id,
+      key: row.key,
+      value: row.value,
+      description: row.description,
+      type: 'STRING' // Default type, can be extended
+    }));
 
-    res.json(config);
+    res.json({
+      data: {
+        configs,
+        total: configs.length
+      }
+    });
   } catch (error) {
     console.error('Get system config error:', error);
     res.status(500).json({ error: 'Internal server error' });

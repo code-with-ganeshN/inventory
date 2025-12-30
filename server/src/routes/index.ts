@@ -12,6 +12,7 @@ import * as inventoryController from '../controllers/inventory';
 import * as ordersController from '../controllers/orders';
 import * as suppliersController from '../controllers/suppliers';
 import * as cartController from '../controllers/cart';
+import * as adminController from '../controllers/admin';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.post('/auth/change-password', authMiddleware, authController.changePasswo
 router.get('/admin/users', authMiddleware, roleMiddleware(['SUPER_ADMIN']), superAdminController.getAllUsers);
 router.post('/admin/users/admin-account', authMiddleware, roleMiddleware(['SUPER_ADMIN']), superAdminController.createAdminAccount);
 router.put('/admin/users/:id', authMiddleware, roleMiddleware(['SUPER_ADMIN']), superAdminController.updateUser);
+router.delete('/admin/users/:id', authMiddleware, roleMiddleware(['SUPER_ADMIN']), superAdminController.deleteUser);
 router.post('/admin/users/:id/deactivate', authMiddleware, roleMiddleware(['SUPER_ADMIN']), superAdminController.deactivateUser);
 router.post('/admin/users/:id/activate', authMiddleware, roleMiddleware(['SUPER_ADMIN']), superAdminController.activateUser);
 router.post('/admin/users/:id/lock', authMiddleware, roleMiddleware(['SUPER_ADMIN']), superAdminController.lockUser);
@@ -61,14 +63,18 @@ router.get('/admin/audit-logs/action/:action', authMiddleware, roleMiddleware(['
 router.get('/admin/audit-stats', authMiddleware, roleMiddleware(['SUPER_ADMIN']), auditController.getAuditStatstics);
 
 // ==================== ADMIN & SUPER ADMIN ROUTES ====================
+// Admin Dashboard
+router.get('/admin/dashboard/stats', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), adminController.getAdminDashboardStats);
+
 // Product Management
+router.get('/products/search', productsController.searchProducts);
 router.get('/products', productsController.getAllProducts);
 router.get('/products/:id', productsController.getProductById);
 router.post('/products', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), productsController.createProduct);
 router.put('/products/:id', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), productsController.updateProduct);
 router.post('/products/:id/deactivate', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), productsController.deactivateProduct);
 router.post('/products/:id/activate', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), productsController.activateProduct);
-router.get('/products/search', productsController.searchProducts);
+router.delete('/products/:id', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), productsController.deleteProduct);
 
 // Category Management
 router.get('/categories', categoriesController.getAllCategories);
@@ -94,14 +100,14 @@ router.get('/orders/:id', authMiddleware, ordersController.getOrderById);
 router.post('/orders/:id/status', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), ordersController.updateOrderStatus);
 router.get('/orders/stats', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), ordersController.getOrderStats);
 
-// Supplier Management
-router.get('/suppliers', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), suppliersController.getAllSuppliers);
-router.get('/suppliers/:id', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), suppliersController.getSupplierById);
-router.post('/suppliers', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), suppliersController.createSupplier);
-router.put('/suppliers/:id', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), suppliersController.updateSupplier);
-router.post('/suppliers/:id/deactivate', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), suppliersController.deactivateSupplier);
-router.post('/suppliers/:supplierId/products/:productId/link', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), suppliersController.linkProductToSupplier);
-router.get('/suppliers/:supplierId/products', authMiddleware, roleMiddleware(['ADMIN', 'SUPER_ADMIN']), suppliersController.getSupplierProducts);
+// Supplier Management - SUPER_ADMIN only
+router.get('/suppliers', authMiddleware, roleMiddleware(['SUPER_ADMIN']), suppliersController.getAllSuppliers);
+router.get('/suppliers/:id', authMiddleware, roleMiddleware(['SUPER_ADMIN']), suppliersController.getSupplierById);
+router.post('/suppliers', authMiddleware, roleMiddleware(['SUPER_ADMIN']), suppliersController.createSupplier);
+router.put('/suppliers/:id', authMiddleware, roleMiddleware(['SUPER_ADMIN']), suppliersController.updateSupplier);
+router.post('/suppliers/:id/deactivate', authMiddleware, roleMiddleware(['SUPER_ADMIN']), suppliersController.deactivateSupplier);
+router.post('/suppliers/:supplierId/products/:productId/link', authMiddleware, roleMiddleware(['SUPER_ADMIN']), suppliersController.linkProductToSupplier);
+router.get('/suppliers/:supplierId/products', authMiddleware, roleMiddleware(['SUPER_ADMIN']), suppliersController.getSupplierProducts);
 
 // ==================== USER ROUTES ====================
 // Order Management

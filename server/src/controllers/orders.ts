@@ -4,18 +4,21 @@ import { logAuditAction } from '../utils/audit';
 import { z } from 'zod';
 
 const CreateOrderSchema = z.object({
-  delivery_address: z.string(),
-  delivery_phone: z.string().optional(),
+  delivery_address: z.string().min(1, 'Delivery address is required'),
+  delivery_phone: z.string().min(1, 'Phone number is required'),
   notes: z.string().optional(),
 });
 
 const UpdateOrderStatusSchema = z.object({
-  status: z.enum(['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED', 'CANCELLED']),
+  status: z.enum(['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'PROCESSING']),
 });
 
 export async function getAllOrders(req: Request, res: Response): Promise<void> {
   try {
+    console.log('getAllOrders called by user:', req.user?.id, 'role:', req.user?.role);
+    
     if (!['SUPER_ADMIN', 'ADMIN'].includes(req.user?.role || '')) {
+      console.log('Access denied for role:', req.user?.role);
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -47,7 +50,10 @@ export async function getAllOrders(req: Request, res: Response): Promise<void> {
     query += ` ORDER BY o.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
 
+    console.log('Executing query:', query, 'with params:', params);
     const result = await pool.query(query, params);
+    console.log('Orders found:', result.rows.length);
+    
     res.json(result.rows);
   } catch (error) {
     console.error('Get all orders error:', error);
@@ -101,21 +107,27 @@ export async function getOrderById(req: Request, res: Response): Promise<void> {
 
 export async function createOrder(req: Request, res: Response): Promise<void> {
   try {
-    if (req.user?.role !== 'USER') {
-      res.status(403).json({ error: 'Forbidden' });
+    console.log('Creating order for user:', req.user?.id);
+    console.log('Request body:', req.body);
+    
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
     const data = CreateOrderSchema.parse(req.body);
+    console.log('Validated data:', data);
 
-    // Get user's cart
+    // Get cart items
     const cartResult = await pool.query(
-      `SELECT sc.*, p.price
+      `SELECT sc.product_id, sc.quantity, p.price, p.name as product_name
        FROM shopping_carts sc
        JOIN products p ON sc.product_id = p.id
-       WHERE sc.user_id = $1 AND sc.saved_for_later = false`,
+       WHERE sc.user_id = $1 AND sc.saved_for_later = false AND p.is_active = true`,
       [req.user.id]
     );
+
+    console.log('Cart items found:', cartResult.rows.length, cartResult.rows);
 
     if (cartResult.rows.length === 0) {
       res.status(400).json({ error: 'Cart is empty' });
@@ -123,67 +135,46 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
     }
 
     // Calculate totals
-    let subtotal = 0;
-    for (const item of cartResult.rows) {
-      subtotal += item.price * item.quantity;
-    }
-
-    const tax = subtotal * 0.1; // 10% tax
+    const subtotal = cartResult.rows.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
+    const tax = subtotal * 1.0;
     const total = subtotal + tax;
 
-    // Generate order number
-    const orderNumber = `ORD-${Date.now()}`;
+    console.log('Order totals:', { subtotal, tax, total });
 
     // Create order
     const orderResult = await pool.query(
-      `INSERT INTO orders (user_id, order_number, subtotal, tax, total, delivery_address, delivery_phone, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [req.user.id, orderNumber, subtotal, tax, total, data.delivery_address, data.delivery_phone, data.notes]
+      `INSERT INTO orders (user_id, order_number, total_amount, tax_amount, shipping_address, notes)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [req.user.id, `ORD-${Date.now()}`, total, tax, data.delivery_address, data.notes || null]
     );
 
     const orderId = orderResult.rows[0].id;
+    console.log('Order created with ID:', orderId);
 
     // Create order items
-    for (const cartItem of cartResult.rows) {
-      const itemSubtotal = cartItem.price * cartItem.quantity;
+    for (const item of cartResult.rows) {
       await pool.query(
-        `INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal)
+        `INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price)
          VALUES ($1, $2, $3, $4, $5)`,
-        [orderId, cartItem.product_id, cartItem.quantity, cartItem.price, itemSubtotal]
-      );
-
-      // Reduce inventory
-      await pool.query(
-        `UPDATE inventory
-         SET quantity_on_hand = quantity_on_hand - $1,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE product_id = $2`,
-        [cartItem.quantity, cartItem.product_id]
+        [orderId, item.product_id, item.quantity, item.price, parseFloat(item.price) * item.quantity]
       );
     }
 
     // Clear cart
     await pool.query('DELETE FROM shopping_carts WHERE user_id = $1 AND saved_for_later = false', [req.user.id]);
 
-    await logAuditAction(req.user.id, 'ORDER_CREATED', 'ORDER', orderId, null, { orderNumber }, req.ip, req.userAgent);
-
-    res.status(201).json({
-      message: 'Order created successfully',
-      order: orderResult.rows[0],
-    });
+    console.log('Order created successfully');
+    res.status(201).json({ message: 'Order created successfully', order: orderResult.rows[0] });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation failed', details: error.issues });
-    } else {
-      console.error('Create order error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
+    console.error('Order creation error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' });
   }
 }
 
 export async function updateOrderStatus(req: Request, res: Response): Promise<void> {
   try {
+    console.log('Update order status called:', req.params.id, req.body);
+    
     if (!['SUPER_ADMIN', 'ADMIN'].includes(req.user?.role || '')) {
       res.status(403).json({ error: 'Forbidden' });
       return;
@@ -205,7 +196,11 @@ export async function updateOrderStatus(req: Request, res: Response): Promise<vo
       return;
     }
 
-    await logAuditAction(req.user?.id || null, 'ORDER_STATUS_UPDATED', 'ORDER', parseInt(id), { status: result.rows[0].status }, data, req.ip, req.userAgent);
+    try {
+      await logAuditAction(req.user?.id || null, 'ORDER_STATUS_UPDATED', 'ORDER', parseInt(id), { status: result.rows[0].status }, data, req.ip, req.userAgent);
+    } catch (auditError) {
+      console.warn('Audit log failed:', auditError);
+    }
 
     res.json({
       message: 'Order status updated successfully',
@@ -213,7 +208,8 @@ export async function updateOrderStatus(req: Request, res: Response): Promise<vo
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      console.error('Validation error:', error.issues);
+      res.status(400).json({ error: 'Invalid status value', details: error.issues });
     } else {
       console.error('Update order status error:', error);
       res.status(500).json({ error: 'Internal server error' });

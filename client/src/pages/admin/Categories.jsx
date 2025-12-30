@@ -2,26 +2,58 @@ import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/Layout/AdminLayout';
 import { Card, Button, Input, Modal, Table, Loading, Error, Badge } from '../../components/Common';
 import { productAPI, categoryAPI } from '../../api/endpoints';
+import { validateForm, categorySchema } from '../../utils/validation';
+import ConnectivityTest from '../../components/ConnectivityTest';
 
 export default function AdminCategories() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showTest, setShowTest] = useState(false);
   const [formData, setFormData] = useState({ name: '', description: '', parent_id: null });
   const [editingId, setEditingId] = useState(null);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     fetchCategories();
   }, []);
 
+  const testDirectAPI = async () => {
+    try {
+      console.log('Testing direct API call...');
+      
+      // Test database info first
+      const dbResponse = await fetch('http://localhost:5000/api/db-info');
+      const dbData = await dbResponse.json();
+      console.log('Database info:', dbData);
+      
+      // Test categories
+      const response = await fetch('http://localhost:5000/api/categories-test');
+      const data = await response.json();
+      console.log('Categories test response:', data);
+      
+      alert(`Tests completed. Check console for details.\nDB Info: ${dbData.success}\nCategories: ${data.success}`);
+    } catch (error) {
+      console.error('Direct API test failed:', error);
+      alert(`Direct API test failed: ${error.message}`);
+    }
+  };
+
   const fetchCategories = async () => {
     setLoading(true);
+    setError(null);
     try {
+      console.log('Fetching categories...');
       const response = await categoryAPI.getAllCategories();
-      setCategories(response.data.categories || []);
+      console.log('Categories response:', response);
+      const categoriesData = Array.isArray(response.data) ? response.data : [];
+      console.log('Categories data:', categoriesData);
+      setCategories(categoriesData);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load categories');
+      console.error('Error fetching categories:', err);
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to load categories';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -37,6 +69,16 @@ export default function AdminCategories() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate form
+    const validation = validateForm(formData, categorySchema);
+    if (!validation.isValid) {
+      setErrors(validation.errors);
+      return;
+    }
+    
+    setErrors({});
+    
     try {
       if (editingId) {
         await categoryAPI.updateCategory(editingId, formData);
@@ -91,10 +133,27 @@ export default function AdminCategories() {
     <AdminLayout>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">Categories Management</h1>
-        <Button onClick={() => { setFormData({ name: '', description: '', parent_id: null }); setEditingId(null); setShowModal(true); }}>
-          + Add Category
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={testDirectAPI}
+            variant="outline"
+            size="sm"
+          >
+            Test Direct API
+          </Button>
+          <Button 
+            onClick={() => setShowTest(!showTest)}
+            variant="secondary"
+          >
+            {showTest ? 'Hide Test' : 'Test Connection'}
+          </Button>
+          <Button onClick={() => { setFormData({ name: '', description: '', parent_id: null }); setEditingId(null); setShowModal(true); }}>
+            + Add Category
+          </Button>
+        </div>
       </div>
+
+      {showTest && <ConnectivityTest />}
 
       {loading && <Loading />}
       {error && <Error message={error} onRetry={fetchCategories} />}

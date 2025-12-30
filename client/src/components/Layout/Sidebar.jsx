@@ -1,31 +1,44 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import {
+  DashboardIcon,
+  BoxIcon,
+  ClipboardIcon,
+  CartIcon,
+  UsersIcon,
+  CogIcon,
+  LockIcon,
+  CheckIcon,
+  ChevronLeft,
+  ChevronRight,
+} from '../Icons';
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = React.useState(false);
+  const { role } = useSelector((state) => state.auth);
 
   const adminMenuItems = [
-    { name: 'Dashboard', href: '/admin', icon: '📊' },
-    { name: 'Products', href: '/admin/products', icon: '📦' },
-    { name: 'Categories', href: '/admin/categories', icon: '🏷️' },
-    { name: 'Inventory', href: '/admin/inventory', icon: '📈' },
-    { name: 'Orders', href: '/admin/orders', icon: '🛒' },
-    { name: 'Suppliers', href: '/admin/suppliers', icon: '🤝' },
-    { name: 'Reports', href: '/admin/reports', icon: '📋' },
+    { name: 'Dashboard', href: '/admin', icon: DashboardIcon },
+    { name: 'Categories', href: '/admin/categories', icon: ClipboardIcon },
+    { name: 'Products', href: '/admin/products', icon: BoxIcon },
+    { name: 'Inventory', href: '/admin/inventory', icon: DashboardIcon },
   ];
 
   const superAdminMenuItems = [
-    { name: 'Dashboard', href: '/super-admin', icon: '👑' },
-    { name: 'Users', href: '/super-admin/users', icon: '👥' },
-    { name: 'Roles', href: '/super-admin/roles', icon: '🔐' },
-    { name: 'Permissions', href: '/super-admin/permissions', icon: '✅' },
-    { name: 'System Config', href: '/super-admin/config', icon: '⚙️' },
-    { name: 'Audit Logs', href: '/super-admin/audit', icon: '📝' },
-    { name: 'Reports', href: '/super-admin/reports', icon: '📊' },
+    { name: 'Dashboard', href: '/superadmin', icon: DashboardIcon },
+    { name: 'Users', href: '/superadmin/users', icon: UsersIcon },
+    { name: 'Roles', href: '/superadmin/roles', icon: LockIcon },
+    { name: 'Permissions', href: '/superadmin/permissions', icon: CheckIcon },
+    { name: 'System Config', href: '/superadmin/config', icon: CogIcon },
+    { name: 'Audit Logs', href: '/superadmin/audit', icon: ClipboardIcon },
+    { name: 'Inventory', href: '/superadmin/inventory', icon: DashboardIcon },
+    { name: 'Orders', href: '/superadmin/orders', icon: CartIcon },
+    { name: 'Reports', href: '/superadmin/reports', icon: DashboardIcon },
   ];
 
-  // Determine which menu to show based on route
-  const isSuperAdmin = window.location.pathname.startsWith('/super-admin');
+  // Determine which menu to show based on user role
+  const isSuperAdmin = role === 'SUPER_ADMIN';
   const menuItems = isSuperAdmin ? superAdminMenuItems : adminMenuItems;
 
   return (
@@ -35,8 +48,9 @@ export default function Sidebar() {
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="p-2 hover:bg-gray-800 rounded"
+          aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
         >
-          {collapsed ? '→' : '←'}
+          {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
         </button>
       </div>
 
@@ -48,7 +62,12 @@ export default function Sidebar() {
             className="flex items-center space-x-3 px-4 py-3 hover:bg-gray-800 transition"
             title={item.name}
           >
-            <span className="text-xl">{item.icon}</span>
+            <span className="text-xl">
+              {(() => {
+                const IconComp = item.icon;
+                return IconComp ? <IconComp className="w-6 h-6" /> : null;
+              })()}
+            </span>
             {!collapsed && <span>{item.name}</span>}
           </Link>
         ))}

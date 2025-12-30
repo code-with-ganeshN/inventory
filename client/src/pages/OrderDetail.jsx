@@ -94,11 +94,11 @@ export default function OrderDetail() {
           <div className="space-y-2">
             <div className="flex justify-between">
               <span className="text-gray-600">Subtotal</span>
-              <span>₹{(order.total_amount * (100 / 118)).toFixed(2)}</span>
+              <span>₹{(order.total_amount / 2).toFixed(2)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Tax (18%)</span>
-              <span>₹{(order.total_amount * 0.18).toFixed(2)}</span>
+              <span className="text-gray-600">Tax (100%)</span>
+              <span>₹{(order.total_amount / 2).toFixed(2)}</span>
             </div>
             <div className="flex justify-between border-t pt-2 font-bold text-lg">
               <span>Total</span>

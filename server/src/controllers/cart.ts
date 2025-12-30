@@ -20,7 +20,7 @@ export async function getCart(req: Request, res: Response): Promise<void> {
     }
 
     const result = await pool.query(
-      `SELECT sc.*, p.name as product_name, p.sku, p.price, p.image_url
+      `SELECT sc.*, p.name as product_name, p.sku, p.price, p.image_url, p.is_active
        FROM shopping_carts sc
        JOIN products p ON sc.product_id = p.id
        WHERE sc.user_id = $1 AND sc.saved_for_later = false
@@ -28,13 +28,15 @@ export async function getCart(req: Request, res: Response): Promise<void> {
       [req.user.id]
     );
 
-    // Calculate totals
+    // Calculate totals (only for active products)
     let subtotal = 0;
     for (const item of result.rows) {
-      subtotal += item.price * item.quantity;
+      if (item.is_active) {
+        subtotal += item.price * item.quantity;
+      }
     }
 
-    const tax = subtotal * 0.1;
+    const tax = subtotal * 1.0;
     const total = subtotal + tax;
 
     res.json({
@@ -194,7 +196,7 @@ export async function getSavedItems(req: Request, res: Response): Promise<void> 
     }
 
     const result = await pool.query(
-      `SELECT sc.*, p.name as product_name, p.sku, p.price, p.image_url
+      `SELECT sc.*, p.name as product_name, p.sku, p.price, p.image_url, p.is_active
        FROM shopping_carts sc
        JOIN products p ON sc.product_id = p.id
        WHERE sc.user_id = $1 AND sc.saved_for_later = true

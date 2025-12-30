@@ -27,17 +27,17 @@ export default function Header() {
 
         {/* Navigation */}
         <nav className="hidden md:flex space-x-6">
-          <a href="/" className="hover:text-blue-200 transition">Home</a>
           {user?.role === 'ADMIN' && (
             <a href="/admin" className="hover:text-blue-200 transition">Admin</a>
           )}
           {user?.role === 'SUPER_ADMIN' && (
-            <a href="/super-admin" className="hover:text-blue-200 transition">Super Admin</a>
+            <a href="/superadmin" className="hover:text-blue-200 transition">Super Admin</a>
           )}
           <a href="/products" className="hover:text-blue-200 transition">Products</a>
+          <a href="/profile" className="hover:text-blue-200 transition">Profile</a>
+          <a href="/orders" className="hover:text-blue-200 transition">My Orders</a>
           <a href="/cart" className="hover:text-blue-200 transition">
             Cart
-            {/* Cart count badge could go here */}
           </a>
         </nav>
 

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import UserLayout from '../components/Layout/UserLayout';
 import { Card, Button, Input, Loading, Error } from '../components/Common';
+import { ProductIcon, CheckIcon, CrossIcon, CartIcon } from '../components/Icons';
 import { productAPI } from '../api/endpoints';
 import { addItem } from '../store/cartSlice';
 
@@ -60,9 +61,9 @@ export default function ProductDetail() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Product Image */}
-        <Card className="bg-gray-100 h-96 flex items-center justify-center text-6xl text-gray-400">
-          📦
-        </Card>
+          <Card className="bg-gray-100 h-96 flex items-center justify-center text-gray-400">
+            <ProductIcon className="w-24 h-24 text-gray-400" />
+          </Card>
 
         {/* Product Details */}
         <Card>
@@ -90,8 +91,18 @@ export default function ProductDetail() {
           {/* Stock Status */}
           <div className="mb-6">
             <p className="text-gray-600 mb-2">Stock Status</p>
-            <p className={`font-bold ${product.status === 'ACTIVE' ? 'text-green-600' : 'text-red-600'}`}>
-              {product.status === 'ACTIVE' ? '✓ In Stock' : '✗ Out of Stock'}
+            <p className={`font-bold ${product.status === 'ACTIVE' ? 'text-green-600 flex items-center space-x-2' : 'text-red-600 flex items-center space-x-2'}`}>
+              {product.status === 'ACTIVE' ? (
+                <>
+                  <CheckIcon className="w-5 h-5 text-green-600" />
+                  <span>In Stock</span>
+                </>
+              ) : (
+                <>
+                  <CrossIcon className="w-5 h-5 text-red-600" />
+                  <span>Out of Stock</span>
+                </>
+              )}
             </p>
           </div>
 
@@ -111,9 +122,10 @@ export default function ProductDetail() {
             variant="primary"
             size="lg"
             onClick={handleAddToCart}
-            className="w-full mb-3"
+            className="w-full mb-3 flex items-center justify-center space-x-2"
           >
-            🛒 Add to Cart
+            <CartIcon className="w-5 h-5" />
+            <span>Add to Cart</span>
           </Button>
 
           <Button
@@ -134,8 +146,8 @@ export default function ProductDetail() {
           {/* Placeholder for related products */}
           {[1, 2, 3].map((i) => (
             <Card key={i}>
-              <div className="bg-gray-200 h-40 rounded-lg mb-4 flex items-center justify-center text-gray-400">
-                📦
+                <div className="bg-gray-200 h-40 rounded-lg mb-4 flex items-center justify-center text-gray-400">
+                <ProductIcon className="w-12 h-12 text-gray-400" />
               </div>
               <h4 className="font-bold mb-2">Related Product {i}</h4>
               <p className="text-blue-600 font-bold">₹999</p>

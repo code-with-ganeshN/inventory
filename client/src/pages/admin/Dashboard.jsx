@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/Layout/AdminLayout';
 import { Card, Loading, Error, Badge } from '../../components/Common';
-import { orderAPI, productAPI, inventoryAPI, auditAPI } from '../../api/endpoints';
+import { adminAPI } from '../../api/endpoints';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
-    totalOrders: 0,
     totalProducts: 0,
-    totalRevenue: 0,
-    lowStockItems: 0,
+    activeProducts: 0,
+    inactiveProducts: 0,
+    lowStockProducts: 0,
   });
-  const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -21,27 +20,11 @@ export default function AdminDashboard() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const ordersResponse = await orderAPI.getAllOrders();
-      const productsResponse = await productAPI.getAllProducts();
-      const inventoryResponse = await inventoryAPI.getInventoryByWarehouse();
-
-      const orders = ordersResponse.data.orders || [];
-      const products = productsResponse.data.products || [];
-      const inventory = inventoryResponse.data.inventory || [];
-
-      const totalRevenue = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-      const lowStockItems = inventory.filter(item => item.quantity <= item.reorder_level).length;
-
-      setStats({
-        totalOrders: orders.length,
-        totalProducts: products.length,
-        totalRevenue,
-        lowStockItems,
-      });
-
-      setRecentOrders(orders.slice(0, 5));
+      const response = await adminAPI.getDashboardStats();
+      setStats(response.data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load dashboard data');
+      console.error('Admin dashboard load error:', err.response || err);
+      setError(err.response?.data?.error || err.message || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -59,65 +42,29 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card>
           <div className="text-center">
-            <div className="text-4xl font-bold text-blue-600 mb-2">{stats.totalOrders}</div>
-            <p className="text-gray-600">Total Orders</p>
-          </div>
-        </Card>
-        <Card>
-          <div className="text-center">
-            <div className="text-4xl font-bold text-green-600 mb-2">{stats.totalProducts}</div>
+            <div className="text-4xl font-bold text-blue-600 mb-2">{stats.totalProducts}</div>
             <p className="text-gray-600">Total Products</p>
           </div>
         </Card>
         <Card>
           <div className="text-center">
-            <div className="text-4xl font-bold text-purple-600 mb-2">₹{(stats.totalRevenue / 100000).toFixed(1)}L</div>
-            <p className="text-gray-600">Total Revenue</p>
+            <div className="text-4xl font-bold text-green-600 mb-2">{stats.activeProducts}</div>
+            <p className="text-gray-600">Active Products</p>
           </div>
         </Card>
         <Card>
           <div className="text-center">
-            <div className="text-4xl font-bold text-red-600 mb-2">{stats.lowStockItems}</div>
-            <p className="text-gray-600">Low Stock Items</p>
+            <div className="text-4xl font-bold text-gray-600 mb-2">{stats.inactiveProducts}</div>
+            <p className="text-gray-600">Inactive Products</p>
+          </div>
+        </Card>
+        <Card>
+          <div className="text-center">
+            <div className="text-4xl font-bold text-red-600 mb-2">{stats.lowStockProducts}</div>
+            <p className="text-gray-600">Low Stock Products</p>
           </div>
         </Card>
       </div>
-
-      {/* Recent Orders */}
-      <Card title="Recent Orders" className="mb-8">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-100 border-b">
-              <tr>
-                <th className="px-4 py-2 text-left">Order #</th>
-                <th className="px-4 py-2 text-left">Customer</th>
-                <th className="px-4 py-2 text-right">Amount</th>
-                <th className="px-4 py-2 text-left">Status</th>
-                <th className="px-4 py-2 text-left">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentOrders.map((order) => (
-                <tr key={order.id} className="border-b hover:bg-gray-50">
-                  <td className="px-4 py-2 font-bold">#{order.order_number}</td>
-                  <td className="px-4 py-2">{order.user_name}</td>
-                  <td className="px-4 py-2 text-right">₹{order.total_amount?.toFixed(2)}</td>
-                  <td className="px-4 py-2">
-                    <Badge variant={
-                      order.status === 'DELIVERED' ? 'green' :
-                      order.status === 'CANCELLED' ? 'red' :
-                      order.status === 'SHIPPED' ? 'blue' : 'yellow'
-                    }>
-                      {order.status}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2">{new Date(order.created_at).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -126,8 +73,8 @@ export default function AdminDashboard() {
             <a href="/admin/products" className="block p-3 bg-blue-50 text-blue-600 rounded hover:bg-blue-100">
               → Manage Products
             </a>
-            <a href="/admin/orders" className="block p-3 bg-green-50 text-green-600 rounded hover:bg-green-100">
-              → Manage Orders
+            <a href="/admin/categories" className="block p-3 bg-green-50 text-green-600 rounded hover:bg-green-100">
+              → Manage Categories
             </a>
             <a href="/admin/inventory" className="block p-3 bg-purple-50 text-purple-600 rounded hover:bg-purple-100">
               → Check Inventory

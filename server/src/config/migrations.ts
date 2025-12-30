@@ -63,6 +63,7 @@ export async function createTables() {
         description TEXT,
         parent_id INTEGER,
         is_active BOOLEAN DEFAULT true,
+        display_order INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE SET NULL
@@ -268,6 +269,18 @@ export async function createTables() {
     await pool.query(`
       ALTER TABLE users
       ADD COLUMN IF NOT EXISTS last_login TIMESTAMP
+    `);
+
+    // Add display_order column to categories if it doesn't exist
+    await pool.query(`
+      ALTER TABLE categories
+      ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0
+    `);
+
+    // Add created_by column to products if it doesn't exist
+    await pool.query(`
+      ALTER TABLE products
+      ADD COLUMN IF NOT EXISTS created_by INTEGER
     `);
 
     console.log('✓ All tables created successfully');

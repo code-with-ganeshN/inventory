@@ -19,6 +19,7 @@ export const productAPI = {
   updateProduct: (id, data) => api.put(`/products/${id}`, data),
   deactivateProduct: (id) => api.post(`/products/${id}/deactivate`),
   activateProduct: (id) => api.post(`/products/${id}/activate`),
+  deleteProduct: (id) => api.delete(`/products/${id}`),
 };
 
 // Category APIs
@@ -90,6 +91,7 @@ export const adminAPI = {
   updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
   deactivateUser: (id) => api.post(`/admin/users/${id}/deactivate`),
   activateUser: (id) => api.post(`/admin/users/${id}/activate`),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
   lockUser: (id) => api.post(`/admin/users/${id}/lock`),
   resetPassword: (id) => api.post(`/admin/users/${id}/reset-password`),
   getUserLoginHistory: (id, params) => api.get(`/admin/users/${id}/login-history`, { params }),

@@ -32,7 +32,12 @@ export async function getAllPermissions(req: Request, res: Response): Promise<vo
     query += ' ORDER BY module, name';
 
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    res.json({
+      data: {
+        permissions: result.rows,
+        total: result.rows.length
+      }
+    });
   } catch (error) {
     console.error('Get all permissions error:', error);
     res.status(500).json({ error: 'Internal server error' });

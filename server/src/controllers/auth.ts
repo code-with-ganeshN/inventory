@@ -6,10 +6,10 @@ import { logAuditAction, logLoginHistory } from '../utils/audit';
 import { z } from 'zod';
 
 const RegisterSchema = z.object({
-  email: z.string().email('Invalid email format'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  first_name: z.string().min(1, 'First name is required'),
-  last_name: z.string().min(1, 'Last name is required'),
+  email: z.string().email('Invalid email format').regex(/^[^\s@]+@gmail\.com$/, 'Please use a Gmail address'),
+  password: z.string().min(8, 'Password must be at least 8 characters').regex(/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, 'Password must contain at least one uppercase letter, one lowercase letter, and one number'),
+  first_name: z.string().min(2, 'First name must be at least 2 characters').regex(/^[a-zA-Z\s]+$/, 'First name can only contain letters and spaces'),
+  last_name: z.string().min(1, 'Last name is required').regex(/^[a-zA-Z\s]+$/, 'Last name can only contain letters and spaces'),
   phone: z.string().optional(),
   address: z.string().optional(),
 });
@@ -69,7 +69,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      res.status(400).json({ error: 'Validation failed', details: error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join(', ') });
     } else {
       console.error('Registration error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -88,7 +88,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     );
 
     if (result.rows.length === 0) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      res.status(401).json({ error: 'No account found with this email address.' });
       return;
     }
 
@@ -108,7 +108,7 @@ export async function login(req: Request, res: Response): Promise<void> {
 
     const isPasswordValid = await comparePassword(data.password, user.password_hash);
     if (!isPasswordValid) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      res.status(401).json({ error: 'Incorrect password. Please try again.' });
       return;
     }
 
@@ -141,7 +141,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      res.status(400).json({ error: 'Please enter a valid email and password.' });
     } else {
       console.error('Login error:', error);
       res.status(500).json({ error: 'Internal server error from backend' });
@@ -187,7 +187,14 @@ export async function getCurrentUser(req: Request, res: Response): Promise<void>
       return;
     }
 
-    res.json(result.rows[0]);
+    // Get role name
+    const roleResult = await pool.query('SELECT name FROM roles WHERE id = $1', [result.rows[0].role_id]);
+    const roleName = roleResult.rows[0]?.name || 'USER';
+
+    res.json({
+      ...result.rows[0],
+      role: roleName
+    });
   } catch (error) {
     console.error('Get current user error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -202,10 +209,10 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
     }
 
     const UpdateProfileSchema = z.object({
-      first_name: z.string().optional(),
-      last_name: z.string().optional(),
-      phone: z.string().optional(),
-      address: z.string().optional(),
+      first_name: z.string().min(2, 'First name must be at least 2 characters').regex(/^[a-zA-Z\s]+$/, 'First name can only contain letters and spaces').optional(),
+      last_name: z.string().regex(/^[a-zA-Z\s]+$/, 'Last name can only contain letters and spaces').optional(),
+      phone: z.string().regex(/^\d+$/, 'Phone number can only contain digits').min(10, 'Phone number must be at least 10 digits').max(15, 'Phone number cannot exceed 15 digits').optional().or(z.literal('')),
+      address: z.string().min(30, 'Address must be at least 30 characters').max(255, 'Address cannot exceed 255 characters').optional().or(z.literal('')),
     });
 
     const data = UpdateProfileSchema.parse(req.body);
@@ -235,7 +242,7 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation failed', details: error.issues });
+      res.status(400).json({ error: 'Validation failed', details: error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join(', ') });
     } else {
       console.error('Update profile error:', error);
       res.status(500).json({ error: 'Internal server error' });
