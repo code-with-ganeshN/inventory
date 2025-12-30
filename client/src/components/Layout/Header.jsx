@@ -6,8 +6,11 @@ import { logout } from '../../store/authSlice';
 export default function Header() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user } = useSelector((state) => state.auth);
+  const { user, role } = useSelector((state) => state.auth);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
+
+  // Use role from user object or fallback to role field
+  const userRole = user?.role || role;
 
   const handleLogout = () => {
     dispatch(logout());
@@ -27,18 +30,16 @@ export default function Header() {
 
         {/* Navigation */}
         <nav className="hidden md:flex space-x-6">
-          {user?.role === 'ADMIN' && (
-            <a href="/admin" className="hover:text-blue-200 transition">Admin</a>
+          {userRole === 'ADMIN' && (
+            <a href="/admin" className="hover:text-blue-200 transition">Admin Dashboard</a>
           )}
-          {user?.role === 'SUPER_ADMIN' && (
-            <a href="/superadmin" className="hover:text-blue-200 transition">Super Admin</a>
+          {userRole === 'SUPER_ADMIN' && (
+            <a href="/superadmin" className="hover:text-blue-200 transition">Super Admin Dashboard</a>
           )}
           <a href="/products" className="hover:text-blue-200 transition">Products</a>
-          <a href="/profile" className="hover:text-blue-200 transition">Profile</a>
+          <a href="/cart" className="hover:text-blue-200 transition">Cart</a>
           <a href="/orders" className="hover:text-blue-200 transition">My Orders</a>
-          <a href="/cart" className="hover:text-blue-200 transition">
-            Cart
-          </a>
+          <a href="/profile" className="hover:text-blue-200 transition">Profile</a>
         </nav>
 
         {/* User Menu */}

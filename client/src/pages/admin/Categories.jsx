@@ -3,14 +3,12 @@ import AdminLayout from '../../components/Layout/AdminLayout';
 import { Card, Button, Input, Modal, Table, Loading, Error, Badge } from '../../components/Common';
 import { productAPI, categoryAPI } from '../../api/endpoints';
 import { validateForm, categorySchema } from '../../utils/validation';
-import ConnectivityTest from '../../components/ConnectivityTest';
 
 export default function AdminCategories() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [showTest, setShowTest] = useState(false);
   const [formData, setFormData] = useState({ name: '', description: '', parent_id: null });
   const [editingId, setEditingId] = useState(null);
   const [errors, setErrors] = useState({});
@@ -18,27 +16,6 @@ export default function AdminCategories() {
   useEffect(() => {
     fetchCategories();
   }, []);
-
-  const testDirectAPI = async () => {
-    try {
-      console.log('Testing direct API call...');
-      
-      // Test database info first
-      const dbResponse = await fetch('http://localhost:5000/api/db-info');
-      const dbData = await dbResponse.json();
-      console.log('Database info:', dbData);
-      
-      // Test categories
-      const response = await fetch('http://localhost:5000/api/categories-test');
-      const data = await response.json();
-      console.log('Categories test response:', data);
-      
-      alert(`Tests completed. Check console for details.\nDB Info: ${dbData.success}\nCategories: ${data.success}`);
-    } catch (error) {
-      console.error('Direct API test failed:', error);
-      alert(`Direct API test failed: ${error.message}`);
-    }
-  };
 
   const fetchCategories = async () => {
     setLoading(true);
@@ -114,43 +91,73 @@ export default function AdminCategories() {
     }
   };
 
-  const columns = [
-    { key: 'name', label: 'Category Name' },
-    { key: 'description', label: 'Description' },
-    {
-      key: 'id',
-      label: 'Actions',
-      render: (row) => (
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => handleEdit(row)}>Edit</Button>
-          <Button size="sm" variant="danger" onClick={() => handleDelete(row.id)}>Delete</Button>
-        </div>
-      ),
-    },
-  ];
-
   return (
     <AdminLayout>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">Categories Management</h1>
         <div className="flex gap-2">
+          <Button 
+            variant="primary" 
+            onClick={() => {
+              setFormData({ name: '', description: '', parent_id: null });
+              setEditingId(null);
+              setErrors({});
+              setShowModal(true);
+            }}
+          >
+            Add Category
+          </Button>
         </div>
       </div>
 
-      {showTest && <ConnectivityTest />}
+      {loading && <div className="text-center py-8">Loading...</div>}
+      {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">{error}</div>}
 
-      {loading && <Loading />}
-      {error && <Error message={error} onRetry={fetchCategories} />}
-
-      <Card>
-        <Table
-          columns={columns}
-          data={categories}
-          loading={loading}
-          error={error}
-          onRetry={fetchCategories}
-        />
-      </Card>
+      {loading ? (
+        <div className="text-center py-8">Loading...</div>
+      ) : (
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-gray-200 sticky top-0">
+              <tr>
+                <th className="border p-3 text-left font-medium text-gray-700">Category Name</th>
+                <th className="border p-3 text-left font-medium text-gray-700">Description</th>
+                <th className="border p-3 text-left font-medium text-gray-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map(category => (
+                <tr key={category.id} className="hover:bg-gray-50">
+                  <td className="border p-3">{category.name}</td>
+                  <td className="border p-3">{category.description || 'No description'}</td>
+                  <td className="border p-3">
+                    <div className="flex gap-2">
+                      <button 
+                        className="p-2 bg-yellow-100 text-yellow-600 rounded hover:bg-yellow-200 transition-colors cursor-pointer"
+                        onClick={() => handleEdit(category)}
+                        title="Edit Category"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button 
+                        className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors cursor-pointer"
+                        onClick={() => handleDelete(category.id)}
+                        title="Delete Category"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <Modal
         isOpen={showModal}

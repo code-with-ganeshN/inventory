@@ -8,6 +8,9 @@ export default function ProductManagement() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewingProduct, setViewingProduct] = useState(null);
+  const [filter, setFilter] = useState('all');
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -78,8 +81,20 @@ export default function ProductManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Create validation data - only validate required fields for updates
+    const validationData = { ...formData };
+    
+    // For updates, don't require stock and threshold if they're empty
+    if (editingId) {
+      // Remove empty optional fields from validation
+      if (!validationData.stock) delete validationData.stock;
+      if (!validationData.low_stock_threshold) delete validationData.low_stock_threshold;
+      if (!validationData.image_url) delete validationData.image_url;
+      if (!validationData.description) delete validationData.description;
+    }
+    
     // Validate form
-    const validation = validateForm(formData, productSchema);
+    const validation = validateForm(validationData, productSchema);
     if (!validation.isValid) {
       setErrors(validation.errors);
       return;
@@ -136,6 +151,8 @@ export default function ProductManagement() {
       price: product.price || '',
       category_id: product.category_id || '',
       image_url: product.image_url || '',
+      stock: product.stock || '',
+      low_stock_threshold: product.low_stock_threshold || '10',
     });
     setEditingId(product.id);
     setShowForm(true);
@@ -178,28 +195,83 @@ export default function ProductManagement() {
   };
 
   const handleView = (product) => {
-    // Navigate to product detail page
-    window.location.href = `/products/${product.id}`;
+    setViewingProduct(product);
+    setShowViewModal(true);
   };
 
-  const handleAdjustInventory = (productId) => {
-    // navigate to inventory page with productId query param
-    window.location.href = `/admin/inventory?productId=${productId}`;
-  };
+  // Filter products based on selected filter
+  const filteredProducts = products.filter(product => {
+    switch (filter) {
+      case 'out_of_stock':
+        return (product.stock || 0) === 0;
+      case 'low_stock':
+        return (product.stock || 0) > 0 && (product.stock || 0) <= (product.low_stock_threshold || 10);
+      case 'inactive':
+        return !product.is_active;
+      default:
+        return true;
+    }
+  });
 
   return (
     <AdminLayout>
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Product Management</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          {showForm ? 'Cancel' : 'Add Product'}
-        </button>
+        <h1 className="text-3xl font-bold">Inventory Management</h1>
+        <div className="flex gap-2 items-center">
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="border rounded px-3 py-2 bg-white text-gray-700"
+          >
+            <option value="all">All Products</option>
+            <option value="out_of_stock">Out of Stock</option>
+            <option value="low_stock">Low Stock</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          {filter !== 'all' && (
+            <button
+              onClick={() => setFilter('all')}
+              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+            >
+              Reset
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            {showForm ? 'Cancel' : 'Add Product'}
+          </button>
+        </div>
       </div>
 
-      {showForm && (
+      {(showForm || editingId) && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">
+                {editingId ? `Edit Product: ${formData.name}` : 'Add New Product'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingId(null);
+                  setFormData({
+                    name: '',
+                    sku: '',
+                    description: '',
+                    price: '',
+                    category_id: '',
+                    image_url: '',
+                    stock: '',
+                    low_stock_threshold: '10',
+                  });
+                }}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
         <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg mb-8 shadow">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -280,12 +352,24 @@ export default function ProductManagement() {
             <div className="col-span-full">
               <input
                 type="number"
-                min="0"
-                placeholder="Initial Stock"
+                min="1"
+                placeholder="Initial Stock (minimum 1)"
                 value={formData.stock}
-                onChange={(e) => handleInputChange('stock', e.target.value, 'number')}
-                className="border rounded px-3 py-2 w-full"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || (parseInt(value) >= 1)) {
+                    handleInputChange('stock', value, 'number');
+                  }
+                }}
+                onBlur={() => {
+                  if (formData.stock && parseInt(formData.stock) < 1) {
+                    handleInputChange('stock', '1', 'number');
+                  }
+                }}
+                className={`border rounded px-3 py-2 w-full ${errors.stock ? 'border-red-500' : ''}`}
               />
+              {errors.stock && <p className="text-red-500 text-sm mt-1">{errors.stock}</p>}
+              <p className="text-sm text-gray-500 mt-1">Stock must be at least 1 unit</p>
             </div>
             <div className="col-span-full">
               <input
@@ -298,13 +382,37 @@ export default function ProductManagement() {
               />
             </div>
           </div>
-          <button
-            type="submit"
-            className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          >
-            {editingId ? 'Update Product' : 'Create Product'}
-          </button>
-        </form>
+          <div className="mt-6 flex gap-2">
+            <button
+              type="submit"
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+            >
+              {editingId ? 'Update Product' : 'Create Product'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+                setFormData({
+                  name: '',
+                  sku: '',
+                  description: '',
+                  price: '',
+                  category_id: '',
+                  image_url: '',
+                  stock: '',
+                  low_stock_threshold: '10',
+                });
+              }}
+              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+          </div>
+          </form>
+          </div>
+        </div>
       )}
 
       {loading ? (
@@ -325,67 +433,90 @@ export default function ProductManagement() {
               </tr>
             </thead>
             <tbody>
-              {products.map(product => (
+              {filteredProducts.map(product => (
                 <tr key={product.id} className="hover:bg-gray-50">
                   <td className="border p-2">{product.id}</td>
                   <td className="border p-2">{product.name}</td>
                   <td className="border p-2">{product.sku}</td>
                   <td className="border p-2">${product.price}</td>
                   <td className="border p-2">
-                    <span className={`px-2 py-1 rounded text-white ${
-                      (product.stock || 0) === 0 ? 'bg-red-700' : 
-                      (product.stock || 0) <= (product.low_stock_threshold || 10) ? 'bg-yellow-600' : 'bg-green-600'
-                    }`}>
-                      {product.stock || 0} {(product.stock || 0) <= (product.low_stock_threshold || 10) && (product.stock || 0) > 0 ? '(Low)' : ''}
-                      {(product.stock || 0) === 0 ? '(Out)' : ''}
-                    </span>
+                    <div className="flex items-center gap-2 whitespace-nowrap">
+                      <span className="font-medium">{product.stock || 0}</span>
+                      {(product.stock || 0) === 0 ? (
+                        <span className="px-2 py-1 text-xs rounded bg-red-100 text-red-800 font-medium">
+                          OUT OF STOCK
+                        </span>
+                      ) : (product.stock || 0) <= (product.low_stock_threshold || 10) ? (
+                        <span className="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-800 font-medium">
+                          LOW STOCK
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs rounded bg-green-100 text-green-800 font-medium">
+                          IN STOCK
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="border p-2">{product.low_stock_threshold || 10}</td>
                   <td className="border p-2">
-                    <span className={`px-2 py-1 rounded text-white ${product.is_active ? 'bg-green-600' : 'bg-red-600'}`}>
+                    <span className={`px-3 py-1 text-sm rounded-full font-medium ${
+                      product.is_active 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
                       {product.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="border p-2">
                     <div className="flex flex-wrap gap-2">
                       <button 
-                        className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+                        className="p-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors cursor-pointer"
                         onClick={() => handleView(product)}
+                        title="View Product Details"
                       >
-                        View
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
                       </button>
                       <button 
-                        className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600"
+                        className="p-2 bg-yellow-100 text-yellow-600 rounded hover:bg-yellow-200 transition-colors cursor-pointer"
                         onClick={() => handleEdit(product)}
+                        title="Edit Product"
                       >
-                        Edit
-                      </button>
-                      <button 
-                        className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600"
-                        onClick={() => handleAdjustInventory(product.id)}
-                      >
-                        Inventory
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
                       </button>
                       {product.is_active ? (
                         <button 
-                          className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600"
+                          className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors cursor-pointer"
                           onClick={() => handleDelete(product.id)}
+                          title="Deactivate Product"
                         >
-                          Deactivate
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
                         </button>
                       ) : (
                         <>
                           <button 
-                            className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
+                            className="p-2 bg-green-100 text-green-600 rounded hover:bg-green-200 transition-colors cursor-pointer"
                             onClick={() => handleActivate(product.id)}
+                            title="Activate Product"
                           >
-                            Activate
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                           </button>
                           <button 
-                            className="bg-red-700 text-white px-3 py-1 rounded text-sm hover:bg-red-800"
+                            className="p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors cursor-pointer"
                             onClick={() => handleDeleteProduct(product.id)}
+                            title="Delete Product Permanently"
                           >
-                            Delete
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                           </button>
                         </>
                       )}
@@ -395,6 +526,120 @@ export default function ProductManagement() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Product View Modal */}
+      {showViewModal && viewingProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Product Details</h2>
+              <button 
+                onClick={() => setShowViewModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Product ID</label>
+                <p className="text-gray-900">{viewingProduct.id}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <p className="text-gray-900">{viewingProduct.name}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+                <p className="text-gray-900">{viewingProduct.sku}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                <p className="text-gray-900">${viewingProduct.price}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <p className="text-gray-900">
+                  {categories.find(cat => cat.id === viewingProduct.category_id)?.name || 'N/A'}
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Stock</label>
+                <p className={`font-semibold ${
+                  (viewingProduct.stock || 0) === 0 ? 'text-red-600' : 
+                  (viewingProduct.stock || 0) <= (viewingProduct.low_stock_threshold || 10) ? 'text-yellow-600' : 'text-green-600'
+                }`}>
+                  {viewingProduct.stock || 0} units
+                  {(viewingProduct.stock || 0) <= (viewingProduct.low_stock_threshold || 10) && (viewingProduct.stock || 0) > 0 && ' (Low Stock)'}
+                  {(viewingProduct.stock || 0) === 0 && ' (Out of Stock)'}
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Threshold</label>
+                <p className="text-gray-900">{viewingProduct.low_stock_threshold || 10} units</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <span className={`px-2 py-1 rounded text-white text-sm ${
+                  viewingProduct.is_active ? 'bg-green-600' : 'bg-red-600'
+                }`}>
+                  {viewingProduct.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+              
+              <div className="col-span-full">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <p className="text-gray-900">{viewingProduct.description || 'No description available'}</p>
+              </div>
+              
+              {viewingProduct.image_url && (
+                <div className="col-span-full">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Image</label>
+                  <img 
+                    src={viewingProduct.image_url} 
+                    alt={viewingProduct.name}
+                    className="max-w-xs h-auto rounded border"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Created At</label>
+                <p className="text-gray-900">
+                  {viewingProduct.created_at ? new Date(viewingProduct.created_at).toLocaleDateString() : 'N/A'}
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Updated</label>
+                <p className="text-gray-900">
+                  {viewingProduct.updated_at ? new Date(viewingProduct.updated_at).toLocaleDateString() : 'N/A'}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex justify-end mt-6">
+              <button 
+                onClick={() => setShowViewModal(false)}
+                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </AdminLayout>

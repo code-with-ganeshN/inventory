@@ -25,24 +25,23 @@ app.get('/', (_req, res) => {
 // Database inspection endpoint
 app.get('/api/db-info', async (_req, res) => {
   try {
-    const { pool } = require('./config/db');
+    const { AppDataSource } = require('./config/database');
+    const { Category } = require('./entities/AllEntities');
     
-    // Get table structure
-    const columns = await pool.query(`
-      SELECT column_name, data_type, is_nullable 
-      FROM information_schema.columns 
-      WHERE table_name = 'categories'
-      ORDER BY ordinal_position
-    `);
+    if (!AppDataSource.isInitialized) {
+      await AppDataSource.initialize();
+    }
+    
+    const categoryRepository = AppDataSource.getRepository(Category);
     
     // Get sample data
-    const sampleData = await pool.query('SELECT * FROM categories LIMIT 3');
+    const sampleData = await categoryRepository.find({ take: 3 });
+    const count = await categoryRepository.count();
     
     res.json({
       success: true,
-      tableStructure: columns.rows,
-      sampleData: sampleData.rows,
-      rowCount: sampleData.rows.length
+      sampleData: sampleData,
+      rowCount: count
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
@@ -52,33 +51,29 @@ app.get('/api/db-info', async (_req, res) => {
 // Test endpoint for categories (no auth)
 app.get('/api/categories-test', async (_req, res) => {
   try {
-    const { pool } = require('./config/db');
+    const { AppDataSource } = require('./config/database');
+    const { Category } = require('./entities/AllEntities');
     console.log('Testing categories table...');
     
-    // Test table exists
-    const tableCheck = await pool.query(`
-      SELECT table_name FROM information_schema.tables 
-      WHERE table_schema = 'public' AND table_name = 'categories'
-    `);
-    
-    if (tableCheck.rows.length === 0) {
-      return res.json({ success: false, error: 'Categories table does not exist' });
+    if (!AppDataSource.isInitialized) {
+      await AppDataSource.initialize();
     }
     
+    const categoryRepository = AppDataSource.getRepository(Category);
+    
     // Test select
-    const result = await pool.query('SELECT * FROM categories LIMIT 5');
+    const result = await categoryRepository.find({ take: 5 });
     res.json({ 
       success: true, 
-      count: result.rows.length, 
-      data: result.rows,
+      count: result.length, 
+      data: result,
       message: 'Categories fetched successfully'
     });
   } catch (error) {
     console.error('Categories test error:', error);
     res.status(500).json({ 
       success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error',
-      code: error instanceof Error && 'code' in error ? (error as any).code : undefined
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

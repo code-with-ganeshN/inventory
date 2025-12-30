@@ -16,10 +16,12 @@ const CreateProductSchema = z.object({
 
 const UpdateProductSchema = z.object({
   name: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().optional().nullable(),
   price: z.number().positive().optional(),
   category_id: z.number().optional(),
-  image_url: z.string().optional(),
+  image_url: z.string().optional().nullable(),
+  stock: z.number().min(0).optional(),
+  low_stock_threshold: z.number().min(0).optional(),
 });
 
 const productService = new ProductService();
@@ -126,6 +128,13 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
 
     const { id } = req.params;
     const data = UpdateProductSchema.parse(req.body);
+    
+    // Additional validation for stock updates
+    if (data.stock !== undefined && data.stock < 1) {
+      res.status(400).json({ error: 'Stock must be greater than 0 when updating' });
+      return;
+    }
+    
     const product = await productService.updateProduct(parseInt(id), data);
 
     await logAuditAction(req.user?.id || null, 'PRODUCT_UPDATED', 'PRODUCT', parseInt(id), null, data, req.ip, req.userAgent);
@@ -186,6 +195,8 @@ export async function activateProduct(req: Request, res: Response): Promise<void
     console.error('Activate product error:', error);
     if (error instanceof Error && error.message === 'Product not found') {
       res.status(404).json({ error: error.message });
+    } else if (error instanceof Error && error.message.includes('Cannot activate product with zero stock')) {
+      res.status(400).json({ error: error.message });
     } else {
       res.status(500).json({ error: 'Internal server error' });
     }

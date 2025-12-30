@@ -151,6 +151,10 @@ export class ProductService {
       throw new Error('Product not found');
     }
 
+    if (product.stock <= 0) {
+      throw new Error('Cannot activate product with zero stock. Please add stock first.');
+    }
+
     product.is_active = true;
     return await this.productRepository.save(product);
   }

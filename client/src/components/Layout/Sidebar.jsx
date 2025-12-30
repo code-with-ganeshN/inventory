@@ -16,27 +16,25 @@ import {
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = React.useState(false);
-  const { role } = useSelector((state) => state.auth);
+  const { user, role } = useSelector((state) => state.auth);
+  
+  // Use role from user object or fallback to role field
+  const userRole = user?.role || role;
 
   const adminMenuItems = [
     { name: 'Dashboard', href: '/admin', icon: DashboardIcon },
     { name: 'Categories', href: '/admin/categories', icon: ClipboardIcon },
-    { name: 'Products', href: '/admin/products', icon: BoxIcon },
+    { name: 'Inventory', href: '/admin/products', icon: BoxIcon },
   ];
 
   const superAdminMenuItems = [
     { name: 'Dashboard', href: '/superadmin', icon: DashboardIcon },
     { name: 'Users', href: '/superadmin/users', icon: UsersIcon },
-    { name: 'Roles', href: '/superadmin/roles', icon: LockIcon },
-    { name: 'Permissions', href: '/superadmin/permissions', icon: CheckIcon },
-    { name: 'System Config', href: '/superadmin/config', icon: CogIcon },
-    { name: 'Audit Logs', href: '/superadmin/audit', icon: ClipboardIcon },
     { name: 'Orders', href: '/superadmin/orders', icon: CartIcon },
-    { name: 'Reports', href: '/superadmin/reports', icon: DashboardIcon },
   ];
 
   // Determine which menu to show based on user role
-  const isSuperAdmin = role === 'SUPER_ADMIN';
+  const isSuperAdmin = userRole === 'SUPER_ADMIN';
   const menuItems = isSuperAdmin ? superAdminMenuItems : adminMenuItems;
 
   return (

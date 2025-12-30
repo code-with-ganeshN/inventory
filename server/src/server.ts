@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 import app from './app';
 import { AppDataSource } from './config/database';
-import { createTables } from './config/migrations';
 import { initializeDatabase } from './config/seeds';
 
 const PORT = process.env.PORT || 5000;
@@ -12,8 +11,7 @@ async function startServer() {
     await AppDataSource.initialize();
     console.log('✅ TypeORM Data Source has been initialized!');
     
-    // Run migrations and seeds
-    await createTables();
+    // Run seeds
     await initializeDatabase();
     
     app.listen(PORT, () => {

@@ -14,8 +14,19 @@ export default function ProductBrowser() {
   const error = useSelector(state => state.products.error);
 
   useEffect(() => {
+    fetchCategories();
     fetchProducts();
   }, [selectedCategory, searchTerm]);
+
+  const fetchCategories = async () => {
+    try {
+      const { categoryAPI } = await import('../api/endpoints');
+      const response = await categoryAPI.getAllCategories();
+      setCategories(response.data || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   const fetchProducts = async () => {
     dispatch(setLoading(true));
@@ -56,14 +67,34 @@ export default function ProductBrowser() {
       {loading && <div className="text-center py-8 text-gray-600">Loading products...</div>}
       {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">{error}</div>}
       
-      <div className="mb-8">
+      <div className="mb-8 flex gap-2">
         <input
           type="text"
           placeholder="Search products..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
         />
+        <select
+          value={selectedCategory || ''}
+          onChange={(e) => setSelectedCategory(e.target.value || null)}
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+        >
+          <option value="">All Categories</option>
+          {categories.map(category => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+        {selectedCategory && (
+          <button
+            onClick={() => setSelectedCategory(null)}
+            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+          >
+            Reset
+          </button>
+        )}
       </div>
 
       {!loading && products.length === 0 && !error && (

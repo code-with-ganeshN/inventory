@@ -72,45 +72,45 @@ export default function Orders() {
             <p className="text-sm text-gray-400 mt-2">Start shopping to see your orders here</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+            <table className="w-full border-collapse">
+              <thead className="bg-gray-200 sticky top-0">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Order #
+                  <th className="border p-3 text-left font-medium text-gray-700">
+                    Order ID
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="border p-3 text-left font-medium text-gray-700">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="border p-3 text-left font-medium text-gray-700">
                     Total
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="border p-3 text-left font-medium text-gray-700">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="border p-3 text-left font-medium text-gray-700">
                     Address
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="border p-3 text-sm font-medium text-gray-900">
                       {order.order_number}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="border p-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(order.status)}`}>
                         {order.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="border p-3 text-sm text-gray-900">
                       ${parseFloat(order.total_amount).toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="border p-3 text-sm text-gray-500">
                       {new Date(order.created_at).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
+                    <td className="border p-3 text-sm text-gray-500 max-w-xs truncate">
                       {order.shipping_address}
                     </td>
                   </tr>

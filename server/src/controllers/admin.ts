@@ -24,8 +24,12 @@ export async function getAdminDashboardStats(req: Request, res: Response): Promi
       where: { is_active: false }
     });
 
-    // For now, set low stock products to 0 since inventory system isn't implemented
-    const lowStockProducts = 0;
+    // Get low stock products count (stock <= low_stock_threshold)
+    const lowStockProducts = await productRepository
+      .createQueryBuilder('product')
+      .where('product.is_active = :active', { active: true })
+      .andWhere('product.stock <= product.low_stock_threshold')
+      .getCount();
 
     res.json({
       totalProducts,

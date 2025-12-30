@@ -103,6 +103,13 @@ export class OrderService {
       throw new Error('Cart is empty');
     }
 
+    // Check stock availability for all items
+    for (const item of cartItems) {
+      if (item.product.stock < item.quantity) {
+        throw new Error(`Insufficient stock for ${item.product.name}. Available: ${item.product.stock}, Requested: ${item.quantity}`);
+      }
+    }
+
     const subtotal = cartItems.reduce((sum, item) => sum + (parseFloat(item.product.price.toString()) * item.quantity), 0);
     const tax = subtotal * 1.0;
     const total = subtotal + tax;
@@ -118,6 +125,7 @@ export class OrderService {
 
     const savedOrder = await this.orderRepository.save(order);
 
+    // Create order items and deduct stock
     for (const item of cartItems) {
       await this.orderItemRepository.save({
         order_id: savedOrder.id,
@@ -126,8 +134,20 @@ export class OrderService {
         unit_price: parseFloat(item.product.price.toString()),
         total_price: parseFloat(item.product.price.toString()) * item.quantity
       });
+
+      // Deduct stock from product and deactivate if stock reaches zero
+      const newStock = item.product.stock - item.quantity;
+      await this.productRepository.update(
+        { id: item.product_id },
+        { 
+          stock: newStock,
+          is_active: newStock > 0,
+          updated_at: new Date()
+        }
+      );
     }
 
+    // Clear cart after successful order
     await this.cartRepository.delete({
       user_id: userId,
       saved_for_later: false
@@ -160,6 +180,28 @@ export class OrderService {
 
     if (['DELIVERED', 'CANCELLED'].includes(order.status)) {
       throw new Error('Cannot cancel order in current status');
+    }
+
+    // Get order items to restore stock
+    const orderItems = await this.orderItemRepository.find({
+      where: { order_id: orderId }
+    });
+
+    // Restore stock for each item
+    for (const item of orderItems) {
+      // Get current product to check if it was deactivated due to zero stock
+      const product = await this.productRepository.findOne({ where: { id: item.product_id } });
+      if (product) {
+        const newStock = product.stock + item.quantity;
+        await this.productRepository.update(
+          { id: item.product_id },
+          { 
+            stock: newStock,
+            is_active: true, // Reactivate product when stock is restored
+            updated_at: new Date()
+          }
+        );
+      }
     }
 
     order.status = 'CANCELLED';

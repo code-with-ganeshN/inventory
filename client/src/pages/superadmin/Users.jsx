@@ -7,11 +7,15 @@ import { validateForm, validateFieldRealTime, sanitizeInput, adminUserSchema } f
 
 export default function SuperAdminUsers() {
   const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
   const { user: currentUser } = useSelector((state) => state.auth);
   const [formData, setFormData] = useState({
     email: '',
@@ -38,6 +42,19 @@ export default function SuperAdminUsers() {
     console.log('Component mounted or currentPage changed:', currentPage);
     fetchUsers();
   }, [currentPage]);
+
+  useEffect(() => {
+    if (searchTerm) {
+      const filtered = users.filter(user => 
+        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.last_name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredUsers(filtered);
+    } else {
+      setFilteredUsers(users);
+    }
+  }, [users, searchTerm]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -144,24 +161,38 @@ export default function SuperAdminUsers() {
         const isCurrentUser = currentUser?.id === row.id;
         return (
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant={row.status === 'ACTIVE' ? 'danger' : 'success'}
-              onClick={() => handleToggleStatus(row.id, row.status)}
+            <button
+              className={`p-2 rounded hover:bg-opacity-80 transition-colors ${
+                row.status === 'ACTIVE' 
+                  ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+                  : 'bg-green-100 text-green-600 hover:bg-green-200'
+              } ${isCurrentUser ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              onClick={() => !isCurrentUser && handleToggleStatus(row.id, row.status)}
               disabled={isCurrentUser}
-              title={isCurrentUser ? 'Cannot modify your own account' : ''}
+              title={isCurrentUser ? 'Cannot modify your own account' : (row.status === 'ACTIVE' ? 'Deactivate User' : 'Activate User')}
             >
-              {row.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
-            </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={() => handleDeleteUser(row.id)}
+              {row.status === 'ACTIVE' ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+            <button
+              className={`p-2 bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors ${
+                isCurrentUser ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              }`}
+              onClick={() => !isCurrentUser && handleDeleteUser(row.id)}
               disabled={isCurrentUser}
-              title={isCurrentUser ? 'Cannot delete your own account' : ''}
+              title={isCurrentUser ? 'Cannot delete your own account' : 'Delete User'}
             >
-              Delete
-            </Button>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
           </div>
         );
       },
@@ -172,20 +203,73 @@ export default function SuperAdminUsers() {
     <AdminLayout>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
-        <Button onClick={() => setShowModal(true)}>+ Add Admin</Button>
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search by email, first name, or last name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-96"
+            />
+            <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <Button onClick={() => setShowModal(true)}>+ Add Admin</Button>
+        </div>
       </div>
 
       {loading && <Loading />}
       {error && <Error message={error} onRetry={fetchUsers} />}
 
       <Card>
-        <Table
-          columns={columns}
-          data={users}
-          loading={loading}
-          error={error}
-          onRetry={fetchUsers}
-        />
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <table className="w-full border-collapse">
+            <thead className="bg-gray-200 sticky top-0">
+              <tr>
+                {columns.map((column) => (
+                  <th key={column.key} className="border p-3 text-left font-medium text-gray-700">
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUsers.map((user) => (
+                <tr key={user.id} className="hover:bg-gray-50">
+                  <td className="border p-3 text-sm">{user.email}</td>
+                  <td className="border p-3 text-sm">{user.first_name}</td>
+                  <td className="border p-3 text-sm">{user.last_name}</td>
+                  <td className="border p-3">
+                    <Badge>{user.role_name || 'Unknown'}</Badge>
+                  </td>
+                  <td className="border p-3">
+                    <Badge variant={user.status === 'ACTIVE' ? 'green' : 'red'}>{user.status}</Badge>
+                  </td>
+                  <td className="border p-3">
+                    <div className="flex gap-2">
+                      <button
+                        className="p-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors cursor-pointer"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setShowViewModal(true);
+                        }}
+                        title="View User Details"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </button>
+                      {columns[5].render(user)}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <div className="mt-6">
           <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
         </div>
@@ -263,6 +347,42 @@ export default function SuperAdminUsers() {
             <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={showViewModal} title="User Details" onClose={() => setShowViewModal(false)}>
+        {selectedUser && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                <p className="text-sm text-gray-900">{selectedUser.email}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
+                <p className="text-sm text-gray-900">{selectedUser.first_name} {selectedUser.last_name}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
+                <Badge>{selectedUser.role_name || 'Unknown'}</Badge>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+                <Badge variant={selectedUser.status === 'ACTIVE' ? 'green' : 'red'}>{selectedUser.status}</Badge>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Created Date</label>
+                <p className="text-sm text-gray-900">{new Date(selectedUser.created_at).toLocaleDateString()}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Last Updated</label>
+                <p className="text-sm text-gray-900">{new Date(selectedUser.updated_at).toLocaleDateString()}</p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="secondary" onClick={() => setShowViewModal(false)}>Close</Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </AdminLayout>
   );
