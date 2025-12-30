@@ -134,22 +134,6 @@ export default function AdminCategories() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">Categories Management</h1>
         <div className="flex gap-2">
-          <Button 
-            onClick={testDirectAPI}
-            variant="outline"
-            size="sm"
-          >
-            Test Direct API
-          </Button>
-          <Button 
-            onClick={() => setShowTest(!showTest)}
-            variant="secondary"
-          >
-            {showTest ? 'Hide Test' : 'Test Connection'}
-          </Button>
-          <Button onClick={() => { setFormData({ name: '', description: '', parent_id: null }); setEditingId(null); setShowModal(true); }}>
-            + Add Category
-          </Button>
         </div>
       </div>
 

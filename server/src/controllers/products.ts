@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { pool } from '../config/db';
+import { ProductService } from '../services/ProductService';
 import { logAuditAction } from '../utils/audit';
 import { z } from 'zod';
 
@@ -20,44 +20,32 @@ const UpdateProductSchema = z.object({
   image_url: z.string().optional(),
 });
 
+const productService = new ProductService();
+
 export async function getAllProducts(req: Request, res: Response): Promise<void> {
   try {
-    const { category_id, active, limit = 20, offset = 0 } = req.query;
-    const params: any[] = [];
-    const conditions: string[] = [];
-
-    let query = `
-      SELECT p.*, c.name as category_name
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.id
-    `;
-
-    // Filter by organization if user is ADMIN (not SUPER_ADMIN)
-    if (req.user?.role === 'ADMIN' && req.user?.organization_id) {
-      conditions.push(`p.organization_id = $${params.length + 1}`);
-      params.push(req.user.organization_id);
+    const { category_id, active, query, limit = 20, offset = 0 } = req.query;
+    
+    // If there's a search query, use the search method
+    if (query) {
+      const products = await productService.searchProducts({
+        query: query as string,
+        category_id: category_id ? parseInt(category_id as string) : undefined,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string)
+      });
+      res.json(products);
+      return;
     }
-
-    if (category_id) {
-      conditions.push(`p.category_id = $${params.length + 1}`);
-      params.push(category_id);
-    }
-
-    if (active === 'true') {
-      conditions.push('p.is_active = true');
-    } else if (active === 'false') {
-      conditions.push('p.is_active = false');
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    query += ` ORDER BY p.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(limit, offset);
-
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    
+    const products = await productService.getAllProducts({
+      category_id: category_id ? parseInt(category_id as string) : undefined,
+      active: active as string,
+      limit: parseInt(limit as string),
+      offset: parseInt(offset as string)
+    });
+    
+    res.json(products);
   } catch (error) {
     console.error('Get all products error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -67,23 +55,15 @@ export async function getAllProducts(req: Request, res: Response): Promise<void>
 export async function getProductById(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-
-    const result = await pool.query(
-      `SELECT p.*, c.name as category_name FROM products p
-       LEFT JOIN categories c ON p.category_id = c.id
-       WHERE p.id = $1`,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'Product not found' });
-      return;
-    }
-
-    res.json(result.rows[0]);
+    const product = await productService.getProductById(parseInt(id));
+    res.json(product);
   } catch (error) {
     console.error('Get product by id error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    if (error instanceof Error && error.message === 'Product not found') {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 }
 
@@ -95,26 +75,21 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
     }
 
     const data = CreateProductSchema.parse(req.body);
-
-    // Check if SKU already exists
-    const existingSKU = await pool.query('SELECT id FROM products WHERE sku = $1', [data.sku]);
-    if (existingSKU.rows.length > 0) {
-      res.status(400).json({ error: 'SKU already exists' });
-      return;
-    }
-
-    const result = await pool.query(
-      `INSERT INTO products (name, sku, description, price, category_id, image_url, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [data.name, data.sku, data.description || null, data.price, data.category_id, data.image_url || null, req.user?.id]
-    );
+    const productData = {
+      name: data.name,
+      sku: data.sku,
+      description: data.description || undefined,
+      price: data.price,
+      category_id: data.category_id,
+      image_url: data.image_url || undefined,
+    };
+    const product = await productService.createProduct(productData);
 
     await logAuditAction(
       req.user?.id || null, 
       'PRODUCT_CREATED', 
       'PRODUCT', 
-      result.rows[0].id, 
+      product.id, 
       null, 
       data, 
       req.ip || null, 
@@ -123,19 +98,16 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
 
     res.status(201).json({
       message: 'Product created successfully',
-      product: result.rows[0],
+      product,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('Product validation error:', error.issues);
       res.status(400).json({ error: 'Validation failed', details: error.issues });
+    } else if (error instanceof Error && error.message === 'SKU already exists') {
+      res.status(400).json({ error: error.message });
     } else {
       console.error('Create product error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        code: error.code
-      });
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -150,34 +122,19 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
 
     const { id } = req.params;
     const data = UpdateProductSchema.parse(req.body);
-
-    const result = await pool.query(
-      `UPDATE products
-       SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
-           price = COALESCE($3, price),
-           category_id = COALESCE($4, category_id),
-           image_url = COALESCE($5, image_url),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6
-       RETURNING *`,
-      [data.name, data.description, data.price, data.category_id, data.image_url, id]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'Product not found' });
-      return;
-    }
+    const product = await productService.updateProduct(parseInt(id), data);
 
     await logAuditAction(req.user?.id || null, 'PRODUCT_UPDATED', 'PRODUCT', parseInt(id), null, data, req.ip, req.userAgent);
 
     res.json({
       message: 'Product updated successfully',
-      product: result.rows[0],
+      product,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: 'Validation failed', details: error.issues });
+    } else if (error instanceof Error && error.message === 'Product not found') {
+      res.status(404).json({ error: error.message });
     } else {
       console.error('Update product error:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -193,23 +150,18 @@ export async function deactivateProduct(req: Request, res: Response): Promise<vo
     }
 
     const { id } = req.params;
-
-    const result = await pool.query(
-      'UPDATE products SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'Product not found' });
-      return;
-    }
+    const product = await productService.deactivateProduct(parseInt(id));
 
     await logAuditAction(req.user?.id || null, 'PRODUCT_DEACTIVATED', 'PRODUCT', parseInt(id), null, {}, req.ip, req.userAgent);
 
-    res.json({ message: 'Product deactivated successfully', product: result.rows[0] });
+    res.json({ message: 'Product deactivated successfully', product });
   } catch (error) {
     console.error('Deactivate product error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    if (error instanceof Error && error.message === 'Product not found') {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 }
 
@@ -221,23 +173,18 @@ export async function activateProduct(req: Request, res: Response): Promise<void
     }
 
     const { id } = req.params;
-
-    const result = await pool.query(
-      'UPDATE products SET is_active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'Product not found' });
-      return;
-    }
+    const product = await productService.activateProduct(parseInt(id));
 
     await logAuditAction(req.user?.id || null, 'PRODUCT_ACTIVATED', 'PRODUCT', parseInt(id), null, {}, req.ip, req.userAgent);
 
-    res.json({ message: 'Product activated successfully', product: result.rows[0] });
+    res.json({ message: 'Product activated successfully', product });
   } catch (error) {
     console.error('Activate product error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    if (error instanceof Error && error.message === 'Product not found') {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 }
 
@@ -249,79 +196,39 @@ export async function deleteProduct(req: Request, res: Response): Promise<void> 
     }
 
     const { id } = req.params;
+    const result = await productService.deleteProduct(parseInt(id));
 
-    // Check if product exists and is inactive
-    const productCheck = await pool.query('SELECT is_active FROM products WHERE id = $1', [id]);
-    if (productCheck.rows.length === 0) {
-      res.status(404).json({ error: 'Product not found' });
-      return;
-    }
-    if (productCheck.rows[0].is_active) {
-      res.status(400).json({ error: 'Product must be deactivated before deletion' });
-      return;
-    }
-
-    // Check for pending orders
-    const pendingOrders = await pool.query(
-      `SELECT COUNT(*) as count FROM order_items oi 
-       JOIN orders o ON oi.order_id = o.id 
-       WHERE oi.product_id = $1 AND o.status NOT IN ('DELIVERED', 'CANCELLED')`,
-      [id]
-    );
-    if (parseInt(pendingOrders.rows[0].count) > 0) {
-      res.status(400).json({ error: 'Cannot delete product with pending orders' });
-      return;
-    }
-
-    // Check for items in cart
-    const cartItems = await pool.query('SELECT COUNT(*) as count FROM shopping_cart WHERE product_id = $1', [id]);
-    if (parseInt(cartItems.rows[0].count) > 0) {
-      res.status(400).json({ error: 'Cannot delete product that exists in shopping carts' });
-      return;
-    }
-
-    await pool.query('DELETE FROM products WHERE id = $1', [id]);
     await logAuditAction(req.user?.id || null, 'PRODUCT_DELETED', 'PRODUCT', parseInt(id), null, {}, req.ip, req.userAgent);
 
-    res.json({ message: 'Product deleted successfully' });
+    res.json(result);
   } catch (error) {
     console.error('Delete product error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    if (error instanceof Error) {
+      if (error.message === 'Product not found') {
+        res.status(404).json({ error: error.message });
+      } else if (error.message.includes('must be deactivated') || error.message.includes('Cannot delete')) {
+        res.status(400).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 }
 
 export async function searchProducts(req: Request, res: Response): Promise<void> {
   try {
     const { query, category_id, limit = 20, offset = 0 } = req.query;
-    const params: any[] = [];
-    const conditions: string[] = [];
-
-    let sql = `
-      SELECT p.*, c.name as category_name
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.id
-      WHERE p.is_active = true
-    `;
-
-    if (query) {
-      conditions.push(`(p.name ILIKE $${params.length + 1} OR p.sku ILIKE $${params.length + 1})`);
-      params.push(`%${query}%`);
-    }
-
-    if (category_id) {
-      conditions.push(`p.category_id = $${params.length + 1}`);
-      params.push(category_id);
-    }
-
-    if (conditions.length > 0) {
-      sql += ' AND ' + conditions.join(' AND ');
-    }
-
-    sql += ` ORDER BY p.name LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    params.push(limit, offset);
-
-    const result = await pool.query(sql, params);
-    res.json(result.rows);
+    
+    const products = await productService.searchProducts({
+      query: query as string,
+      category_id: category_id ? parseInt(category_id as string) : undefined,
+      limit: parseInt(limit as string),
+      offset: parseInt(offset as string)
+    });
+    
+    res.json(products);
   } catch (error) {
     console.error('Search products error:', error);
     res.status(500).json({ error: 'Internal server error' });

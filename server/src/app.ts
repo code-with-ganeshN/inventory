@@ -45,7 +45,7 @@ app.get('/api/db-info', async (_req, res) => {
       rowCount: sampleData.rows.length
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 
@@ -77,8 +77,8 @@ app.get('/api/categories-test', async (_req, res) => {
     console.error('Categories test error:', error);
     res.status(500).json({ 
       success: false, 
-      error: error.message,
-      code: error.code
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: error instanceof Error && 'code' in error ? (error as any).code : undefined
     });
   }
 });

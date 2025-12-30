@@ -72,7 +72,7 @@ export default function ProductBrowser() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {products.map(product => (
-          <div key={product.id} className="border rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
+          <div key={product.id} className={`border rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-shadow ${!product.is_active ? 'opacity-50 blur-sm' : ''}`}>
             {product.image_url && (
               <img src={product.image_url} alt={product.name} className="w-full h-48 object-cover" />
             )}
@@ -82,9 +82,14 @@ export default function ProductBrowser() {
               <p className="text-2xl font-bold text-blue-600 mb-4">${Number(product.price).toFixed(2)}</p>
               <button 
                 onClick={() => addToCart(product.id)}
-                className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+                disabled={!product.is_active}
+                className={`w-full py-2 rounded ${
+                  product.is_active 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                }`}
               >
-                Add to Cart
+                {product.is_active ? 'Add to Cart' : 'Unavailable'}
               </button>
             </div>
           </div>

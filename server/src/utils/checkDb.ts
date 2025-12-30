@@ -1,55 +1,42 @@
-import { pool } from '../config/db';
+import { AppDataSource } from '../config/database';
+import { Category } from '../entities/AllEntities';
 
 async function checkDatabase() {
   try {
-    console.log('Checking database connection...');
+    console.log('Checking TypeORM database connection...');
     
-    // Check if categories table exists
-    const tableCheck = await pool.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public' AND table_name = 'categories'
-    `);
-    
-    if (tableCheck.rows.length === 0) {
-      console.log('❌ Categories table does not exist');
-      return;
+    if (!AppDataSource.isInitialized) {
+      await AppDataSource.initialize();
+      console.log('✅ TypeORM DataSource initialized');
     }
     
-    console.log('✅ Categories table exists');
+    const categoryRepository = AppDataSource.getRepository(Category);
     
-    // Check table structure
-    const columns = await pool.query(`
-      SELECT column_name, data_type, is_nullable, column_default
-      FROM information_schema.columns 
-      WHERE table_name = 'categories'
-      ORDER BY ordinal_position
-    `);
+    // Check if categories table exists by trying to count
+    const categoriesCount = await categoryRepository.count();
+    console.log(`✅ Categories table exists with ${categoriesCount} records`);
     
-    console.log('Categories table structure:');
-    columns.rows.forEach(col => {
-      console.log(`  ${col.column_name}: ${col.data_type} (nullable: ${col.is_nullable})`);
+    // Try to create a test category
+    const testCategory = categoryRepository.create({
+      name: 'Test Category',
+      description: 'Test Description',
+      is_active: true,
+      display_order: 0
     });
     
-    // Try to select from categories
-    const categoriesCount = await pool.query('SELECT COUNT(*) FROM categories');
-    console.log(`Categories count: ${categoriesCount.rows[0].count}`);
-    
-    // Try to insert a test category
-    const testResult = await pool.query(`
-      INSERT INTO categories (name, description, is_active, display_order) 
-      VALUES ('Test Category', 'Test Description', true, 0) 
-      RETURNING *
-    `);
-    console.log('✅ Test category created:', testResult.rows[0]);
+    const savedCategory = await categoryRepository.save(testCategory);
+    console.log('✅ Test category created:', savedCategory);
     
     // Clean up test category
-    await pool.query('DELETE FROM categories WHERE name = $1', ['Test Category']);
+    await categoryRepository.remove(savedCategory);
     console.log('✅ Test category cleaned up');
     
   } catch (error) {
     console.error('❌ Database check failed:', error);
   } finally {
+    if (AppDataSource.isInitialized) {
+      await AppDataSource.destroy();
+    }
     process.exit(0);
   }
 }

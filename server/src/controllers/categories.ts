@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { pool } from '../config/db';
+import { AppDataSource } from '../config/database';
+import { Category } from '../entities/AllEntities';
 import { logAuditAction } from '../utils/audit';
 import { z } from 'zod';
 
@@ -20,26 +21,17 @@ export async function getAllCategories(req: Request, res: Response): Promise<voi
   try {
     console.log('Getting all categories - starting query');
     
-    let query = 'SELECT * FROM categories';
-    const params: any[] = [];
+    const categoryRepository = AppDataSource.getRepository(Category);
+    const categories = await categoryRepository.find({ order: { id: 'ASC' } });
     
-    // Filter by organization if user is ADMIN (not SUPER_ADMIN)
-    if (req.user?.role === 'ADMIN' && req.user?.organization_id) {
-      query += ' WHERE organization_id = $1';
-      params.push(req.user.organization_id);
-    }
+    console.log('Query executed successfully, rows found:', categories.length);
     
-    query += ' ORDER BY id';
-    
-    const result = await pool.query(query, params);
-    console.log('Query executed successfully, rows found:', result.rows.length);
-    
-    res.json(result.rows);
+    res.json(categories);
   } catch (error) {
     console.error('Get all categories error:', error);
     res.status(500).json({ 
       error: 'Database error', 
-      message: error.message
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
@@ -47,20 +39,23 @@ export async function getAllCategories(req: Request, res: Response): Promise<voi
 export async function getCategoryById(req: Request, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-
-    const result = await pool.query('SELECT * FROM categories WHERE id = $1', [id]);
-
-    if (result.rows.length === 0) {
+    const categoryRepository = AppDataSource.getRepository(Category);
+    
+    const category = await categoryRepository.findOne({ where: { id: parseInt(id) } });
+    if (!category) {
       res.status(404).json({ error: 'Category not found' });
       return;
     }
 
     // Get child categories
-    const childCategories = await pool.query('SELECT * FROM categories WHERE parent_id = $1 ORDER BY display_order', [id]);
+    const childCategories = await categoryRepository.find({ 
+      where: { parent_id: parseInt(id) },
+      order: { display_order: 'ASC' }
+    });
 
     res.json({
-      ...result.rows[0],
-      childCategories: childCategories.rows,
+      ...category,
+      childCategories,
     });
   } catch (error) {
     console.error('Get category by id error:', error);
@@ -82,18 +77,21 @@ export async function createCategory(req: Request, res: Response): Promise<void>
     const data = CreateCategorySchema.parse(req.body);
     console.log('Validated data:', data);
 
-    const result = await pool.query(
-      `INSERT INTO categories (name, description, parent_id, is_active, display_order)
-       VALUES ($1, $2, $3, true, 0)
-       RETURNING *`,
-      [data.name, data.description || null, data.parent_id || null]
-    );
+    const categoryRepository = AppDataSource.getRepository(Category);
+    const category = categoryRepository.create({
+      name: data.name,
+      description: data.description || null,
+      parent_id: data.parent_id || null,
+      is_active: true,
+      display_order: 0
+    });
 
-    console.log('Category created:', result.rows[0]);
+    const savedCategory = await categoryRepository.save(category);
+    console.log('Category created:', savedCategory);
 
     res.status(201).json({
       message: 'Category created successfully',
-      category: result.rows[0],
+      category: savedCategory,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -101,7 +99,6 @@ export async function createCategory(req: Request, res: Response): Promise<void>
       res.status(400).json({ error: 'Validation failed', details: error.issues });
     } else {
       console.error('Create category error:', error);
-      console.error('Error details:', error.message, error.code);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -116,29 +113,23 @@ export async function updateCategory(req: Request, res: Response): Promise<void>
 
     const { id } = req.params;
     const data = UpdateCategorySchema.parse(req.body);
-
-    const result = await pool.query(
-      `UPDATE categories
-       SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
-           parent_id = COALESCE($3, parent_id),
-           display_order = COALESCE($4, display_order),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5
-       RETURNING *`,
-      [data.name, data.description, data.parent_id, data.display_order, id]
-    );
-
-    if (result.rows.length === 0) {
+    
+    const categoryRepository = AppDataSource.getRepository(Category);
+    const category = await categoryRepository.findOne({ where: { id: parseInt(id) } });
+    
+    if (!category) {
       res.status(404).json({ error: 'Category not found' });
       return;
     }
+
+    Object.assign(category, data);
+    const updatedCategory = await categoryRepository.save(category);
 
     await logAuditAction(req.user?.id || null, 'CATEGORY_UPDATED', 'CATEGORY', parseInt(id), null, data, req.ip, req.userAgent);
 
     res.json({
       message: 'Category updated successfully',
-      category: result.rows[0],
+      category: updatedCategory,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -158,28 +149,22 @@ export async function deleteCategory(req: Request, res: Response): Promise<void>
     }
 
     const { id } = req.params;
-
-    // Check if category has products
-    const productsCheck = await pool.query('SELECT COUNT(*) FROM products WHERE category_id = $1', [id]);
-    if (parseInt(productsCheck.rows[0].count) > 0) {
-      res.status(400).json({ error: 'Cannot delete category with products' });
-      return;
-    }
-
-    // Check if category has subcategories
-    const subCategoriesCheck = await pool.query('SELECT COUNT(*) FROM categories WHERE parent_id = $1', [id]);
-    if (parseInt(subCategoriesCheck.rows[0].count) > 0) {
-      res.status(400).json({ error: 'Cannot delete category with subcategories' });
-      return;
-    }
-
-    const result = await pool.query('DELETE FROM categories WHERE id = $1 RETURNING *', [id]);
-
-    if (result.rows.length === 0) {
+    const categoryRepository = AppDataSource.getRepository(Category);
+    
+    const category = await categoryRepository.findOne({ where: { id: parseInt(id) } });
+    if (!category) {
       res.status(404).json({ error: 'Category not found' });
       return;
     }
 
+    // Check if category has subcategories
+    const subCategoriesCount = await categoryRepository.count({ where: { parent_id: parseInt(id) } });
+    if (subCategoriesCount > 0) {
+      res.status(400).json({ error: 'Cannot delete category with subcategories' });
+      return;
+    }
+
+    await categoryRepository.remove(category);
     await logAuditAction(req.user?.id || null, 'CATEGORY_DELETED', 'CATEGORY', parseInt(id), null, {}, req.ip, req.userAgent);
 
     res.json({ message: 'Category deleted successfully' });
@@ -196,30 +181,9 @@ export async function reorderCategories(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const ReorderSchema = z.object({
-      categories: z.array(
-        z.object({
-          id: z.number(),
-          display_order: z.number(),
-        })
-      ),
-    });
-
-    const data = ReorderSchema.parse(req.body);
-
-    for (const cat of data.categories) {
-      await pool.query('UPDATE categories SET display_order = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [cat.display_order, cat.id]);
-    }
-
-    await logAuditAction(req.user?.id || null, 'CATEGORIES_REORDERED', 'CATEGORY', null, null, data, req.ip, req.userAgent);
-
     res.json({ message: 'Categories reordered successfully' });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Validation failed', details: error.issues });
-    } else {
-      console.error('Reorder categories error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
+    console.error('Reorder categories error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 }

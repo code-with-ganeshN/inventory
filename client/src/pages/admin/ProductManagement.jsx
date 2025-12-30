@@ -171,6 +171,11 @@ export default function ProductManagement() {
     }
   };
 
+  const handleView = (product) => {
+    // Navigate to product detail page
+    window.location.href = `/products/${product.id}`;
+  };
+
   const handleAdjustInventory = (productId) => {
     // navigate to inventory page with productId query param
     window.location.href = `/admin/inventory?productId=${productId}`;
@@ -178,7 +183,6 @@ export default function ProductManagement() {
 
   return (
     <AdminLayout>
-      <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Product Management</h1>
         <button
@@ -305,16 +309,49 @@ export default function ProductManagement() {
                     </span>
                   </td>
                   <td className="border p-2">
-                    <button className="text-blue-600 hover:underline mr-2" onClick={() => handleEdit(product)}>Edit</button>
-                    <button className="text-gray-600 hover:underline mr-2" onClick={() => handleAdjustInventory(product.id)}>Adjust Inventory</button>
-                    {product.is_active ? (
-                      <button className="text-red-600 hover:underline" onClick={() => handleDelete(product.id)}>Deactivate</button>
-                    ) : (
-                      <>
-                        <button className="text-green-600 hover:underline mr-2" onClick={() => handleActivate(product.id)}>Activate</button>
-                        <button className="text-red-800 hover:underline" onClick={() => handleDeleteProduct(product.id)}>Delete</button>
-                      </>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <button 
+                        className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+                        onClick={() => handleView(product)}
+                      >
+                        View
+                      </button>
+                      <button 
+                        className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600"
+                        onClick={() => handleEdit(product)}
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600"
+                        onClick={() => handleAdjustInventory(product.id)}
+                      >
+                        Inventory
+                      </button>
+                      {product.is_active ? (
+                        <button 
+                          className="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600"
+                          onClick={() => handleDelete(product.id)}
+                        >
+                          Deactivate
+                        </button>
+                      ) : (
+                        <>
+                          <button 
+                            className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
+                            onClick={() => handleActivate(product.id)}
+                          >
+                            Activate
+                          </button>
+                          <button 
+                            className="bg-red-700 text-white px-3 py-1 rounded text-sm hover:bg-red-800"
+                            onClick={() => handleDeleteProduct(product.id)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -322,7 +359,6 @@ export default function ProductManagement() {
           </table>
         </div>
       )}
-      </div>
     </AdminLayout>
   );
 }

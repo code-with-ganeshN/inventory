@@ -81,23 +81,6 @@ export default function AdminDashboard() {
             </a>
           </div>
         </Card>
-
-        <Card title="System Status">
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span>Database</span>
-              <Badge variant="green">Connected</Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>API Server</span>
-              <Badge variant="green">Running</Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Backup Status</span>
-              <Badge variant="green">Updated</Badge>
-            </div>
-          </div>
-        </Card>
       </div>
     </AdminLayout>
   );

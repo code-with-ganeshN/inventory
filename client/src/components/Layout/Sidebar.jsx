@@ -42,7 +42,7 @@ export default function Sidebar() {
   const menuItems = isSuperAdmin ? superAdminMenuItems : adminMenuItems;
 
   return (
-    <aside className={`bg-gray-900 text-white transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'} min-h-screen`}>
+    <aside className={`bg-gray-900 text-white transition-all duration-300 ${collapsed ? 'w-20' : 'w-56'} min-h-screen`}>
       <div className="p-4 flex justify-between items-center">
         {!collapsed && <h2 className="font-bold text-lg">Admin Menu</h2>}
         <button

@@ -43,7 +43,16 @@ export default function Login() {
         token: response.data.token,
         role: response.data.user.role,
       }));
-      navigate('/');
+      
+      // Redirect based on user role
+      const userRole = response.data.user.role;
+      if (userRole === 'SUPER_ADMIN') {
+        navigate('/superadmin');
+      } else if (userRole === 'ADMIN') {
+        navigate('/admin');
+      } else {
+        navigate('/products');
+      }
     } catch (error) {
       // Handle errors without dispatching any success actions
       const errorMessage = error.response?.data?.error || 'Login failed';

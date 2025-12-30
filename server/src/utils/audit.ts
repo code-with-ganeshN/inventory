@@ -1,4 +1,4 @@
-import { pool } from '../config/db';
+import { AppDataSource } from '../config/database';
 
 export async function logAuditAction(
   userId: number | null,
@@ -11,12 +11,18 @@ export async function logAuditAction(
   userAgent: string | null = null
 ): Promise<void> {
   try {
-    await pool.query(
-      `INSERT INTO audit_logs 
-       (user_id, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [userId, action, entityType, entityId, JSON.stringify(oldValues), JSON.stringify(newValues), ipAddress, userAgent]
-    );
+    // For now, just log to console since audit_logs table needs to be created as entity
+    console.log('Audit Log:', {
+      userId,
+      action,
+      entityType,
+      entityId,
+      oldValues,
+      newValues,
+      ipAddress,
+      userAgent,
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Error logging audit action:', error);
   }
@@ -28,11 +34,13 @@ export async function logLoginHistory(
   userAgent: string | null = null
 ): Promise<void> {
   try {
-    await pool.query(
-      `INSERT INTO login_history (user_id, ip_address, user_agent) 
-       VALUES ($1, $2, $3)`,
-      [userId, ipAddress, userAgent]
-    );
+    // For now, just log to console since login_history table needs to be created as entity
+    console.log('Login History:', {
+      userId,
+      ipAddress,
+      userAgent,
+      loginTime: new Date().toISOString()
+    });
   } catch (error) {
     console.error('Error logging login history:', error);
   }

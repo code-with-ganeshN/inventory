@@ -10,7 +10,6 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 
 // User Pages
-import Home from './pages/Home';
 import ProductBrowser from './pages/ProductBrowser';
 import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
@@ -34,6 +33,21 @@ import SuperAdminConfig from './pages/superadmin/Config';
 import SuperAdminAudit from './pages/superadmin/AuditLogs';
 import SuperAdminInventory from './pages/superadmin/Inventory';
 import SuperAdminOrders from './pages/superadmin/Orders';
+
+// Role-based redirect component
+function RoleBasedRedirect() {
+  const { user } = useSelector((state) => state.auth);
+  
+  if (!user) return <Navigate to="/login" />;
+  
+  if (user.role === 'SUPER_ADMIN') {
+    return <Navigate to="/superadmin" />;
+  } else if (user.role === 'ADMIN') {
+    return <Navigate to="/admin" />;
+  } else {
+    return <Navigate to="/products" />;
+  }
+}
 
 function App() {
   const { isAuthenticated, user } = useSelector((state) => state.auth);
@@ -60,15 +74,17 @@ function App() {
         {/* Public Routes */}
         <Route
           path="/login"
-          element={isAuthenticated ? <Navigate to="/" /> : <Login />}
+          element={isAuthenticated ? <RoleBasedRedirect /> : <Login />}
         />
         <Route
           path="/register"
-          element={isAuthenticated ? <Navigate to="/" /> : <Register />}
+          element={isAuthenticated ? <RoleBasedRedirect /> : <Register />}
         />
 
+        {/* Root redirect */}
+        <Route path="/" element={<RoleBasedRedirect />} />
+
         {/* User Routes */}
-        <Route path="/" element={<Home />} />
         <Route
           path="/products"
           element={
@@ -227,7 +243,7 @@ function App() {
         />
 
         {/* Catch all */}
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="*" element={<RoleBasedRedirect />} />
       </Routes>
     </BrowserRouter>
   );

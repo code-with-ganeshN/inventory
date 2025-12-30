@@ -51,9 +51,9 @@ router.put('/admin/permissions/:id', authMiddleware, roleMiddleware(['SUPER_ADMI
 router.delete('/admin/permissions/:id', authMiddleware, roleMiddleware(['SUPER_ADMIN']), permissionsController.deletePermission);
 
 // System Configuration
-router.get('/admin/config', systemConfigController.getSystemConfig);
+router.get('/admin/config', authMiddleware, roleMiddleware(['SUPER_ADMIN']), systemConfigController.getSystemConfig);
 router.put('/admin/config', authMiddleware, roleMiddleware(['SUPER_ADMIN']), systemConfigController.updateSystemConfig);
-router.get('/admin/config/:key', systemConfigController.getConfigValue);
+router.get('/admin/config/:key', authMiddleware, roleMiddleware(['SUPER_ADMIN']), systemConfigController.getConfigValue);
 router.post('/admin/config/:key', authMiddleware, roleMiddleware(['SUPER_ADMIN']), systemConfigController.setConfigValue);
 
 // Audit & Monitoring

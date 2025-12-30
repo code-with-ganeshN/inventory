@@ -1,19 +1,28 @@
+import 'reflect-metadata';
 import app from './app';
-import {pool} from "./config/db";
+import { AppDataSource } from './config/database';
 import { createTables } from './config/migrations';
 import { initializeDatabase } from './config/seeds';
 
 const PORT = process.env.PORT || 5000;
 
-async function startDB(){
-    await pool.query('select 1');
-    console.log('Database connection successful');
+async function startServer() {
+  try {
+    // Initialize TypeORM
+    await AppDataSource.initialize();
+    console.log('✅ TypeORM Data Source has been initialized!');
+    
+    // Run migrations and seeds
     await createTables();
     await initializeDatabase();
+    
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ Error during server startup:', error);
+    process.exit(1);
+  }
 }
 
-startDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-});
+startServer();

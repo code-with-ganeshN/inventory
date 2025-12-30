@@ -82,7 +82,6 @@ export default function AdminOrders() {
     <AdminLayout>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">Orders Management</h1>
-        <Button onClick={fetchOrders}>Refresh</Button>
       </div>
 
       {loading && <Loading />}

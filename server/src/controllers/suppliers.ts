@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { pool } from '../config/db';
+import { AppDataSource } from '../config/database';
 import { logAuditAction } from '../utils/audit';
 import { z } from 'zod';
 

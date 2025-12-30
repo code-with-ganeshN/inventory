@@ -1,173 +1,282 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/Layout/AdminLayout';
-import { Card, Button, Input, Modal, Table, Loading, Error, Badge } from '../../components/Common';
-import { inventoryAPI } from '../../api/endpoints';
+import { inventoryAPI, productAPI } from '../../api/endpoints';
 
 export default function AdminInventory() {
   const [inventory, setInventory] = useState([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
     product_id: '',
-    warehouse_id: '',
     quantity: 0,
-    reorder_level: 0,
+    low_stock_threshold: 10,
   });
   const [queryProductId, setQueryProductId] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   useEffect(() => {
-    // check URL for productId query param
+    // Check URL for productId query param
     const params = new URLSearchParams(window.location.search);
     const pid = params.get('productId');
     if (pid) {
       setQueryProductId(Number(pid));
-      setFormData((f) => ({ ...f, product_id: Number(pid) }));
+      setFormData(prev => ({ ...prev, product_id: Number(pid) }));
+      setShowModal(true); // Auto-open modal for specific product
     }
-    fetchInventory(pid ? Number(pid) : undefined);
-  }, []);
+    fetchInventory();
+    fetchProducts();
+  }, [queryProductId]);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await productAPI.getAllProducts({});
+      const productsList = Array.isArray(response.data) ? response.data : response.data?.products || [];
+      setProducts(productsList);
+      
+      // If we have a query product ID, find and set the selected product
+      if (queryProductId) {
+        const product = productsList.find(p => p.id === queryProductId);
+        setSelectedProduct(product);
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error);
+    }
+  };
 
   const fetchInventory = async () => {
     setLoading(true);
     try {
       if (queryProductId) {
+        // Get specific product inventory
         const response = await inventoryAPI.getInventoryByProduct(queryProductId);
-        const items = Array.isArray(response.data) ? response.data : response.data?.inventory || [];
-        // normalize fields for UI
-        const normalized = items.map((it) => ({
-          ...it,
-          quantity: it.quantity_on_hand ?? it.quantity ?? 0,
-          reorder_level: it.low_stock_threshold ?? it.reorder_level ?? 0,
-        }));
-        setInventory(normalized);
-        // if we have items, default warehouse_id to the first item's warehouse
-        if (items.length > 0 && !formData.warehouse_id) {
-          setFormData((f) => ({ ...f, warehouse_id: items[0].warehouse_id }));
-        }
+        setInventory(Array.isArray(response.data) ? response.data : []);
       } else {
-        // Use selected warehouse_id if set, otherwise default to warehouse 1
-        const warehouseId = formData.warehouse_id || 1;
-        const response = await inventoryAPI.getInventoryByWarehouse(warehouseId);
-        const payload = response.data;
-        const items = Array.isArray(payload) ? payload : payload?.inventory || [];
-        const normalized = items.map((it) => ({
-          ...it,
-          quantity: it.quantity_on_hand ?? it.quantity ?? 0,
-          reorder_level: it.low_stock_threshold ?? it.reorder_level ?? 0,
-        }));
-        setInventory(normalized);
+        // Get all products and their inventory status
+        const [inventoryResponse, productsResponse] = await Promise.all([
+          inventoryAPI.getInventoryByWarehouse(1).catch(() => ({ data: [] })),
+          productAPI.getAllProducts({})
+        ]);
+        
+        const inventoryData = Array.isArray(inventoryResponse.data) ? inventoryResponse.data : [];
+        const productsData = Array.isArray(productsResponse.data) ? productsResponse.data : productsResponse.data?.products || [];
+        
+        // Create inventory view combining products with their inventory data
+        const inventoryView = productsData.map(product => {
+          const inventoryItem = inventoryData.find(inv => inv.product_id === product.id);
+          return {
+            product_id: product.id,
+            product_name: product.name,
+            product_sku: product.sku,
+            quantity_on_hand: inventoryItem?.quantity_on_hand || 0,
+            low_stock_threshold: inventoryItem?.low_stock_threshold || 10,
+            ...inventoryItem
+          };
+        });
+        
+        setInventory(inventoryView);
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load inventory');
+      setInventory([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === 'product_id' || name === 'warehouse_id' ? parseInt(value) : parseInt(value),
-    }));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await inventoryAPI.updateStock(formData.product_id, {
-        warehouse_id: formData.warehouse_id,
+      await inventoryAPI.adjustStock(formData.product_id, {
+        warehouse_id: 1, // Default warehouse
         quantity: formData.quantity,
+        notes: 'Stock adjustment from admin panel'
       });
+      
+      // Update low stock threshold if provided
+      if (formData.low_stock_threshold) {
+        await inventoryAPI.setLowStockThreshold(formData.product_id, {
+          warehouse_id: 1, // Default warehouse
+          threshold: formData.low_stock_threshold
+        });
+      }
+      
       alert('Inventory updated successfully');
       setShowModal(false);
-      fetchInventory();
+      setFormData({ product_id: '', quantity: 0, low_stock_threshold: 10 });
+      setSelectedProduct(null);
+      // Refresh both inventory and products data
+      await fetchInventory();
+      await fetchProducts();
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to update inventory');
     }
   };
 
-  const columns = [
-    { key: 'product_name', label: 'Product' },
-    { key: 'warehouse_name', label: 'Warehouse' },
-    { key: 'quantity', label: 'Quantity' },
-    {
-      key: 'status',
-      label: 'Status',
-      render: (row) => (
-        <Badge variant={row.quantity > row.reorder_level ? 'green' : 'red'}>
-          {row.quantity > row.reorder_level ? 'In Stock' : 'Low Stock'}
-        </Badge>
-      ),
-    },
-    {
-      key: 'id',
-      label: 'Actions',
-      render: () => (
-        <Button size="sm" onClick={() => setShowModal(true)}>Adjust</Button>
-      ),
-    },
-  ];
+  const handleAdjustClick = (item) => {
+    setFormData({
+      product_id: item.product_id,
+      quantity: item.quantity_on_hand || 0,
+      low_stock_threshold: item.low_stock_threshold || 10
+    });
+    const product = products.find(p => p.id === item.product_id);
+    setSelectedProduct(product);
+    setShowModal(true);
+  };
 
   return (
     <AdminLayout>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Inventory Management</h1>
-        <Button onClick={() => setShowModal(true)}>+ Adjust Stock</Button>
+        <h1 className="text-3xl font-bold text-gray-800">
+          {queryProductId ? `Inventory - ${selectedProduct?.name || 'Product'}` : 'Inventory Management'}
+        </h1>
+        <button 
+          onClick={() => setShowModal(true)}
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          + Adjust Stock
+        </button>
       </div>
 
-      {loading && <Loading />}
-      {error && <Error message={error} onRetry={fetchInventory} />}
+      {loading && <div className="text-center py-8">Loading inventory...</div>}
+      {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">{error}</div>}
 
-      <Card>
-        <Table
-          columns={columns}
-          data={inventory}
-          loading={loading}
-          error={error}
-          onRetry={fetchInventory}
-        />
-      </Card>
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Low Stock Threshold</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {inventory.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  {queryProductId ? 'No inventory found for this product' : 'No inventory items found'}
+                </td>
+              </tr>
+            ) : (
+              inventory.map((item, index) => {
+                const isLowStock = item.quantity_on_hand <= item.low_stock_threshold;
+                return (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {item.product_name || `Product ID: ${item.product_id}`}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {item.product_sku || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {item.quantity_on_hand || 0}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {item.low_stock_threshold || 10}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        isLowStock ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                      }`}>
+                        {isLowStock ? 'Low Stock' : 'In Stock'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => handleAdjustClick(item)}
+                        className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+                      >
+                        Adjust
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+            )}
+          </tbody>
+        </table>
+      </div>
 
-      <Modal isOpen={showModal} title="Adjust Stock" onClose={() => setShowModal(false)}>
-        <form onSubmit={handleSubmit}>
-          <Input
-            type="number"
-            name="product_id"
-            label="Product ID"
-            value={formData.product_id}
-            onChange={handleChange}
-            required
-          />
-          <Input
-            type="number"
-            name="warehouse_id"
-            label="Warehouse ID"
-            value={formData.warehouse_id}
-            onChange={handleChange}
-            required
-          />
-          <Input
-            type="number"
-            name="quantity"
-            label="Quantity"
-            value={formData.quantity}
-            onChange={handleChange}
-            required
-          />
-          <Input
-            type="number"
-            name="reorder_level"
-            label="Reorder Level"
-            value={formData.reorder_level}
-            onChange={handleChange}
-          />
-          <div className="flex gap-2 mt-4">
-            <Button type="submit" variant="primary">Update</Button>
-            <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
+      {/* Adjust Stock Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">
+                Adjust Stock {selectedProduct && `- ${selectedProduct.name}`}
+              </h3>
+              <form onSubmit={handleSubmit}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Product</label>
+                  <select
+                    value={formData.product_id}
+                    onChange={(e) => {
+                      const productId = Number(e.target.value);
+                      setFormData(prev => ({ ...prev, product_id: productId }));
+                      const product = products.find(p => p.id === productId);
+                      setSelectedProduct(product);
+                    }}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    required
+                  >
+                    <option value="">Select Product</option>
+                    {products.map(product => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} ({product.sku})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">New Quantity</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.quantity}
+                    onChange={(e) => setFormData(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Low Stock Threshold</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.low_stock_threshold}
+                    onChange={(e) => setFormData(prev => ({ ...prev, low_stock_threshold: Number(e.target.value) }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    Update Stock
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowModal(false);
+                      setFormData({ product_id: '', quantity: 0, low_stock_threshold: 10 });
+                      setSelectedProduct(null);
+                    }}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </form>
-      </Modal>
+        </div>
+      )}
     </AdminLayout>
   );
 }

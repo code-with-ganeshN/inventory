@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
-import { pool } from '../config/db';
-import { hashPassword, comparePassword } from '../utils/password';
-import { generateToken } from '../utils/jwt';
-import { logAuditAction, logLoginHistory } from '../utils/audit';
+import { AuthService } from '../services/AuthService';
+import { logAuditAction } from '../utils/audit';
 import { z } from 'zod';
 
 const RegisterSchema = z.object({
@@ -19,52 +17,25 @@ const LoginSchema = z.object({
   password: z.string(),
 });
 
+const authService = new AuthService();
+
 export async function register(req: Request, res: Response): Promise<void> {
   try {
     const data = RegisterSchema.parse(req.body);
-
-    // Check if user already exists
-    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [data.email]);
-    if (existingUser.rows.length > 0) {
-      res.status(400).json({ error: 'User already exists' });
-      return;
-    }
-
-    const passwordHash = await hashPassword(data.password);
-    // Default to USER role (id: 3)
-    const roleId = 3;
-
-    const result = await pool.query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, phone, address, role_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, email, first_name, last_name, phone, address, role_id, is_active, created_at`,
-      [data.email, passwordHash, data.first_name, data.last_name, data.phone, data.address, roleId]
-    );
-
-    const user = result.rows[0];
-
-    // Get role name
-    const roleResult = await pool.query('SELECT name FROM roles WHERE id = $1', [roleId]);
-    const roleName = roleResult.rows[0]?.name || 'USER';
-
-    const token = generateToken({
-      id: user.id,
-      email: user.email,
-      role: roleName,
-    });
-
-    await logAuditAction(user.id, 'USER_REGISTERED', 'USER', user.id, null, { email: user.email }, req.ip, req.userAgent);
+    const result = await authService.register(data);
+    
+    await logAuditAction(result.user.id, 'USER_REGISTERED', 'USER', result.user.id, null, { email: data.email }, req.ip, req.userAgent);
 
     res.status(201).json({
       message: 'User registered successfully',
-      token,
+      token: result.token,
       user: {
-        id: user.id,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        phone: user.phone,
-        address: user.address,
+        id: result.user.id,
+        email: result.user.email,
+        first_name: result.user.first_name,
+        last_name: result.user.last_name,
+        phone: result.user.phone,
+        address: result.user.address,
       },
     });
   } catch (error) {
@@ -80,71 +51,30 @@ export async function register(req: Request, res: Response): Promise<void> {
 export async function login(req: Request, res: Response): Promise<void> {
   try {
     const data = LoginSchema.parse(req.body);
-
-    const result = await pool.query(
-      `SELECT id, email, password_hash, first_name, last_name, role_id, is_active, is_locked
-       FROM users WHERE email = $1`,
-      [data.email]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(401).json({ error: 'No account found with this email address.' });
-      return;
-    }
-
-    const user = result.rows[0];
-
-    // Check if account is locked
-    if (user.is_locked) {
-      res.status(403).json({ error: 'Account is locked' });
-      return;
-    }
-
-    // Check if account is active
-    if (!user.is_active) {
-      res.status(403).json({ error: 'Account is inactive' });
-      return;
-    }
-
-    const isPasswordValid = await comparePassword(data.password, user.password_hash);
-    if (!isPasswordValid) {
-      res.status(401).json({ error: 'Incorrect password. Please try again.' });
-      return;
-    }
-
-    // Get role name
-    const roleResult = await pool.query('SELECT name FROM roles WHERE id = $1', [user.role_id]);
-    const roleName = roleResult.rows[0]?.name || 'USER';
-
-    const token = generateToken({
-      id: user.id,
-      email: user.email,
-      role: roleName,
-    });
-
-    // Update last login
-    await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
-
-    // Log login history
-    await logLoginHistory(user.id, (req as any).clientIp, (req as any).userAgent);
+    const result = await authService.login(data.email, data.password);
 
     res.json({
       message: 'Login successful',
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        role: roleName,
-      },
+      token: result.token,
+      user: result.user,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: 'Please enter a valid email and password.' });
     } else {
       console.error('Login error:', error);
-      res.status(500).json({ error: 'Internal server error from backend' });
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      if (message.includes('No account found')) {
+        res.status(401).json({ error: message });
+      } else if (message.includes('Incorrect password')) {
+        res.status(401).json({ error: message });
+      } else if (message.includes('Account is locked')) {
+        res.status(403).json({ error: message });
+      } else if (message.includes('Account is inactive')) {
+        res.status(403).json({ error: message });
+      } else {
+        res.status(500).json({ error: 'Internal server error from backend' });
+      }
     }
   }
 }
@@ -156,6 +86,7 @@ export async function refreshToken(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    const { generateToken } = await import('../utils/jwt');
     const token = generateToken({
       id: req.user.id,
       email: req.user.email,
@@ -176,25 +107,8 @@ export async function getCurrentUser(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const result = await pool.query(
-      `SELECT id, email, first_name, last_name, phone, address, role_id, is_active, last_login
-       FROM users WHERE id = $1`,
-      [req.user.id]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    // Get role name
-    const roleResult = await pool.query('SELECT name FROM roles WHERE id = $1', [result.rows[0].role_id]);
-    const roleName = roleResult.rows[0]?.name || 'USER';
-
-    res.json({
-      ...result.rows[0],
-      role: roleName
-    });
+    const user = await authService.getCurrentUser(req.user.id);
+    res.json(user);
   } catch (error) {
     console.error('Get current user error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -216,29 +130,13 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
     });
 
     const data = UpdateProfileSchema.parse(req.body);
-
-    const result = await pool.query(
-      `UPDATE users 
-       SET first_name = COALESCE($1, first_name),
-           last_name = COALESCE($2, last_name),
-           phone = COALESCE($3, phone),
-           address = COALESCE($4, address),
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5
-       RETURNING id, email, first_name, last_name, phone, address, role_id, is_active`,
-      [data.first_name, data.last_name, data.phone, data.address, req.user.id]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
+    const user = await authService.updateProfile(req.user.id, data);
 
     await logAuditAction(req.user.id, 'PROFILE_UPDATED', 'USER', req.user.id, null, data, req.ip, req.userAgent);
 
     res.json({
       message: 'Profile updated successfully',
-      user: result.rows[0],
+      user,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -263,25 +161,7 @@ export async function changePassword(req: Request, res: Response): Promise<void>
     });
 
     const data = ChangePasswordSchema.parse(req.body);
-
-    const userResult = await pool.query(
-      'SELECT password_hash FROM users WHERE id = $1',
-      [req.user.id]
-    );
-
-    if (userResult.rows.length === 0) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    const isPasswordValid = await comparePassword(data.old_password, userResult.rows[0].password_hash);
-    if (!isPasswordValid) {
-      res.status(401).json({ error: 'Invalid old password' });
-      return;
-    }
-
-    const newPasswordHash = await hashPassword(data.new_password);
-    await pool.query('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [newPasswordHash, req.user.id]);
+    await authService.changePassword(req.user.id, data.old_password, data.new_password);
 
     await logAuditAction(req.user.id, 'PASSWORD_CHANGED', 'USER', req.user.id, null, {}, req.ip, req.userAgent);
 
