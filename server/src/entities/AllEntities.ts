@@ -143,6 +143,12 @@ export class Product {
   @Column({ nullable: true })
   image_url!: string;
 
+  @Column({ default: 0 })
+  stock!: number;
+
+  @Column({ default: 10 })
+  low_stock_threshold!: number;
+
   @Column({ default: 'ACTIVE' })
   status!: string;
 

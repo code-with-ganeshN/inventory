@@ -51,6 +51,8 @@ export class ProductService {
       price: p.price,
       category_id: p.category_id,
       image_url: p.image_url,
+      stock: p.stock,
+      low_stock_threshold: p.low_stock_threshold,
       is_active: p.is_active,
       created_at: p.created_at,
       category_name: p.category?.name || null
@@ -76,6 +78,8 @@ export class ProductService {
       price: product.price,
       category_id: product.category_id,
       image_url: product.image_url,
+      stock: product.stock,
+      low_stock_threshold: product.low_stock_threshold,
       is_active: product.is_active,
       created_at: product.created_at,
       category_name: product.category?.name || null
@@ -89,6 +93,8 @@ export class ProductService {
   price: number;
   category_id: number;
   image_url?: string;
+  stock?: number;
+  low_stock_threshold?: number;
 }) {
   const existingProduct = await this.productRepository.findOne({
     where: { sku: data.sku }
@@ -105,7 +111,9 @@ export class ProductService {
     price: data.price,
     category_id: data.category_id,
     image_url: data.image_url ?? null,
-  } as Product);   // 👈 THIS is the fix
+    stock: data.stock ?? 0,
+    low_stock_threshold: data.low_stock_threshold ?? 10,
+  } as Product);
 
   return this.productRepository.save(product);
 }
@@ -219,6 +227,8 @@ export class ProductService {
       price: p.price,
       category_id: p.category_id,
       image_url: p.image_url,
+      stock: p.stock,
+      low_stock_threshold: p.low_stock_threshold,
       is_active: p.is_active,
       created_at: p.created_at,
       category_name: p.category?.name || null

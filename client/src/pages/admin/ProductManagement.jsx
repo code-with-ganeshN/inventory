@@ -15,6 +15,8 @@ export default function ProductManagement() {
     price: '',
     category_id: '',
     image_url: '',
+    stock: '',
+    low_stock_threshold: '10',
   });
   const [editingId, setEditingId] = useState(null);
   const [errors, setErrors] = useState({});
@@ -93,6 +95,8 @@ export default function ProductManagement() {
         price: Number(formData.price),
         category_id: Number(formData.category_id),
         image_url: formData.image_url || null,
+        stock: formData.stock ? Number(formData.stock) : undefined,
+        low_stock_threshold: formData.low_stock_threshold ? Number(formData.low_stock_threshold) : undefined,
       };
 
       let resp;
@@ -111,6 +115,8 @@ export default function ProductManagement() {
         price: '',
         category_id: '',
         image_url: '',
+        stock: '',
+        low_stock_threshold: '10',
       });
       setShowForm(false);
       setEditingId(null);
@@ -271,6 +277,26 @@ export default function ProductManagement() {
               />
               {errors.image_url && <p className="text-red-500 text-sm mt-1">{errors.image_url}</p>}
             </div>
+            <div className="col-span-full">
+              <input
+                type="number"
+                min="0"
+                placeholder="Initial Stock"
+                value={formData.stock}
+                onChange={(e) => handleInputChange('stock', e.target.value, 'number')}
+                className="border rounded px-3 py-2 w-full"
+              />
+            </div>
+            <div className="col-span-full">
+              <input
+                type="number"
+                min="0"
+                placeholder="Low Stock Threshold (default: 10)"
+                value={formData.low_stock_threshold}
+                onChange={(e) => handleInputChange('low_stock_threshold', e.target.value, 'number')}
+                className="border rounded px-3 py-2 w-full"
+              />
+            </div>
           </div>
           <button
             type="submit"
@@ -292,6 +318,8 @@ export default function ProductManagement() {
                 <th className="border p-2 text-left">Name</th>
                 <th className="border p-2 text-left">SKU</th>
                 <th className="border p-2 text-left">Price</th>
+                <th className="border p-2 text-left">Stock</th>
+                <th className="border p-2 text-left">Low Stock Threshold</th>
                 <th className="border p-2 text-left">Status</th>
                 <th className="border p-2 text-left">Actions</th>
               </tr>
@@ -303,6 +331,16 @@ export default function ProductManagement() {
                   <td className="border p-2">{product.name}</td>
                   <td className="border p-2">{product.sku}</td>
                   <td className="border p-2">${product.price}</td>
+                  <td className="border p-2">
+                    <span className={`px-2 py-1 rounded text-white ${
+                      (product.stock || 0) === 0 ? 'bg-red-700' : 
+                      (product.stock || 0) <= (product.low_stock_threshold || 10) ? 'bg-yellow-600' : 'bg-green-600'
+                    }`}>
+                      {product.stock || 0} {(product.stock || 0) <= (product.low_stock_threshold || 10) && (product.stock || 0) > 0 ? '(Low)' : ''}
+                      {(product.stock || 0) === 0 ? '(Out)' : ''}
+                    </span>
+                  </td>
+                  <td className="border p-2">{product.low_stock_threshold || 10}</td>
                   <td className="border p-2">
                     <span className={`px-2 py-1 rounded text-white ${product.is_active ? 'bg-green-600' : 'bg-red-600'}`}>
                       {product.is_active ? 'Active' : 'Inactive'}

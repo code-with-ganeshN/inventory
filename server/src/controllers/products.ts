@@ -10,6 +10,8 @@ const CreateProductSchema = z.object({
   price: z.number().positive('Price must be positive'),
   category_id: z.number().positive('Category ID is required'),
   image_url: z.string().optional().nullable(),
+  stock: z.number().min(0).optional(),
+  low_stock_threshold: z.number().min(0).optional(),
 });
 
 const UpdateProductSchema = z.object({
@@ -82,6 +84,8 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
       price: data.price,
       category_id: data.category_id,
       image_url: data.image_url || undefined,
+      stock: data.stock,
+      low_stock_threshold: data.low_stock_threshold,
     };
     const product = await productService.createProduct(productData);
 

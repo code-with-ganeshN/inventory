@@ -22,7 +22,6 @@ export default function Sidebar() {
     { name: 'Dashboard', href: '/admin', icon: DashboardIcon },
     { name: 'Categories', href: '/admin/categories', icon: ClipboardIcon },
     { name: 'Products', href: '/admin/products', icon: BoxIcon },
-    { name: 'Inventory', href: '/admin/inventory', icon: DashboardIcon },
   ];
 
   const superAdminMenuItems = [
@@ -32,7 +31,6 @@ export default function Sidebar() {
     { name: 'Permissions', href: '/superadmin/permissions', icon: CheckIcon },
     { name: 'System Config', href: '/superadmin/config', icon: CogIcon },
     { name: 'Audit Logs', href: '/superadmin/audit', icon: ClipboardIcon },
-    { name: 'Inventory', href: '/superadmin/inventory', icon: DashboardIcon },
     { name: 'Orders', href: '/superadmin/orders', icon: CartIcon },
     { name: 'Reports', href: '/superadmin/reports', icon: DashboardIcon },
   ];
